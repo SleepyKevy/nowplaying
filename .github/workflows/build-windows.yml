@@ -48,7 +48,19 @@ jobs:
 
       - name: Apply smooth progress and transparency controls
         shell: pwsh
-        run: git apply --directory=source ./overrides/smooth-ui.patch
+        run: |
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          $targets = @(
+            './source/src/render/render-config.hpp',
+            './source/src/render/card-renderer.cpp',
+            './source/src/obs/now-playing-source.cpp',
+            './source/data/locale/en-US.ini'
+          )
+          foreach ($target in $targets) {
+            $text = [System.IO.File]::ReadAllText($target).Replace("`r`n", "`n")
+            [System.IO.File]::WriteAllText($target, $text, $utf8NoBom)
+          }
+          git apply --directory=source --ignore-space-change --ignore-whitespace ./overrides/smooth-ui.patch
 
       - name: Validate project
         shell: pwsh
