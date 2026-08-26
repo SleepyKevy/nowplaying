@@ -1,0 +1,269 @@
+     obs_data_set_default_int(settings, "progress_background", obs_rgba(255, 255, 255, 46));
++    obs_data_set_default_int(settings, "progress_background_2", obs_rgba(190, 170, 255, 46));
++    obs_data_set_default_int(settings, "progress_background_3", obs_rgba(120, 200, 255, 46));
++    obs_data_set_default_double(settings, "progress_background_gradient_angle", 0.0);
+ 
+     obs_data_set_default_bool(settings, "hide_when_idle", true);
+     obs_data_set_default_bool(settings, "hide_when_paused", false);
+diff --git a/src/render/card-renderer.cpp b/src/render/card-renderer.cpp
+index f5ad1ee..de3700e 100644
+--- a/src/render/card-renderer.cpp
++++ b/src/render/card-renderer.cpp
+@@ -1,9 +1,11 @@
+ #include "card-renderer.hpp"
+ 
++#include <QBrush>
+ #include <QFontMetricsF>
+ #include <QLinearGradient>
+ #include <QPainter>
+ #include <QPainterPath>
++#include <QPen>
+ #include <QRectF>
+ 
+ #include <algorithm>
+@@ -35,22 +37,7 @@ QString display_title(const TrackState& state)
+     if (state.status == PlaybackStatus::unavailable) {
+         return QStringLiteral("Spotify Desktop not detected");
+     }
+-    return QStringLiteral("Nothing playing");
+-}
+-
+-QString status_text(PlaybackStatus status)
+-{
+-    switch (status) {
+-    case PlaybackStatus::playing:
+-        return QStringLiteral("PLAYING");
+-    case PlaybackStatus::paused:
+-        return QStringLiteral("PAUSED");
+-    case PlaybackStatus::stopped:
+-        return QStringLiteral("STOPPED");
+-    case PlaybackStatus::unavailable:
+-    default:
+-        return QStringLiteral("OFFLINE");
+-    }
++    return QStringLiteral("No track");
+ }
+ 
+ QString format_time(std::int64_t milliseconds)
+@@ -76,9 +63,78 @@ QFont sized_font(const RenderConfig& config, int pixel_size, bool bold)
+     return font;
+ }
+ 
+-void draw_line(QPainter& painter, const QString& text, const QFont& font, const QColor& color,
+-               const QRectF& bounds, TextAlignment alignment, OverflowMode overflow,
+-               double marquee_seconds, double marquee_speed)
++QColor apply_opacity(QColor color, int opacity_percent)
++{
++    const double multiplier = std::clamp(opacity_percent, 0, 100) / 100.0;
++    color.setAlpha(static_cast<int>(std::lround(color.alpha() * multiplier)));
++    return color;
++}
++
++int gradient_color_count(GradientMode mode)
++{
++    switch (mode) {
++    case GradientMode::three_color:
++        return 3;
++    case GradientMode::two_color:
++        return 2;
++    case GradientMode::solid:
++    default:
++        return 1;
++    }
++}
++
++QBrush gradient_brush(const GradientStyle& style, const QRectF& bounds, int opacity_percent = 100)
++{
++    const QColor color1 = apply_opacity(style.color1, opacity_percent);
++    if (style.mode == GradientMode::solid || bounds.isEmpty()) {
++        return QBrush(color1);
++    }
++
++    const QColor color2 = apply_opacity(style.color2, opacity_percent);
++    const QColor color3 = apply_opacity(style.color3, opacity_percent);
++    const double radians = style.angle * pi / 180.0;
++    const QPointF direction(std::cos(radians), std::sin(radians));
++    const double radius = std::max(1.0, std::hypot(bounds.width(), bounds.height()) * 0.5);
++    const QPointF center = bounds.center();
++    QLinearGradient gradient(center - direction * radius, center + direction * radius);
++    gradient.setColorAt(0.0, color1);
++    if (style.mode == GradientMode::three_color) {
++        gradient.setColorAt(0.5, color2);
++        gradient.setColorAt(1.0, color3);
++    } else {
++        gradient.setColorAt(1.0, color2);
++    }
++    return QBrush(gradient);
++}
++
++bool style_visible(const GradientStyle& style, int opacity_percent = 100)
++{
++    const int count = gradient_color_count(style.mode);
++    const QColor colors[3] = {
++        apply_opacity(style.color1, opacity_percent),
++        apply_opacity(style.color2, opacity_percent),
++        apply_opacity(style.color3, opacity_percent),
++    };
++    for (int index = 0; index < count; ++index) {
++        if (colors[index].alpha() > 0) {
++            return true;
++        }
++    }
++    return false;
++}
++
++void set_gradient_pen(QPainter& painter, const GradientStyle& style, const QRectF& bounds,
++                      double width = 1.0, int opacity_percent = 100)
++{
++    QPen pen(gradient_brush(style, bounds, opacity_percent), width);
++    pen.setJoinStyle(Qt::RoundJoin);
++    pen.setCapStyle(Qt::RoundCap);
++    painter.setPen(pen);
++}
++
++void draw_line(QPainter& painter, const QString& text, const QFont& font,
++               const GradientStyle& style, const QRectF& bounds, TextAlignment alignment,
++               OverflowMode overflow, double marquee_seconds, double marquee_speed)
+ {
+     if (text.isEmpty() || bounds.width() <= 0.0 || bounds.height() <= 0.0) {
+         return;
+@@ -86,7 +142,7 @@ void draw_line(QPainter& painter, const QString& text, const QFont& font, const
+ 
+     painter.save();
+     painter.setFont(font);
+-    painter.setPen(color);
++    set_gradient_pen(painter, style, bounds);
+     painter.setClipRect(bounds);
+ 
+     const QFontMetricsF metrics(font);
+@@ -125,7 +181,7 @@ QRectF contained_rect(const QSize& source, const QRectF& destination)
+ }
+ 
+ void draw_artwork(QPainter& painter, const QImage& artwork, const QRectF& bounds, int radius,
+-                  const QColor& accent)
++                  const GradientStyle& accent)
+ {
+     QPainterPath path;
+     path.addRoundedRect(bounds, radius, radius);
+@@ -135,14 +191,19 @@ void draw_artwork(QPainter& painter, const QImage& artwork, const QRectF& bounds
+         const QRectF target = contained_rect(artwork.size(), bounds);
+         painter.drawImage(target, artwork, artwork.rect());
+     } else {
+-        QColor first = accent;
+-        first.setAlpha(150);
+-        QColor second = accent.lighter(145);
+-        second.setAlpha(90);
+-        QLinearGradient placeholder(bounds.topLeft(), bounds.bottomRight());
+-        placeholder.setColorAt(0.0, first);
+-        placeholder.setColorAt(1.0, second);
+-        painter.fillRect(bounds, placeholder);
++        GradientStyle placeholder = accent;
++        placeholder.mode = GradientMode::three_color;
++        QColor first = placeholder.color1;
++        QColor second = placeholder.color2;
++        QColor third = placeholder.color3;
++        first.setAlpha(std::min(170, std::max(80, first.alpha())));
++        second.setAlpha(std::min(135, std::max(60, second.alpha())));
++        third.setAlpha(std::min(110, std::max(50, third.alpha())));
++        placeholder.color1 = first;
++        placeholder.color2 = second;
++        placeholder.color3 = third;
++        placeholder.angle = 35.0;
++        painter.fillRect(bounds, gradient_brush(placeholder, bounds));
+         QFont note_font(QStringLiteral("Segoe UI Symbol"));
+         note_font.setPixelSize(static_cast<int>(bounds.height() * 0.42));
+         note_font.setBold(true);
+@@ -159,11 +220,147 @@ double eased(double value)
+     return 1.0 - std::pow(1.0 - t, 3.0);
+ }
+ 
+-QColor apply_opacity(QColor color, int opacity_percent)
++void fill_rounded(QPainter& painter, const QRectF& rect, double radius, const QBrush& brush)
+ {
+-    const double multiplier = std::clamp(opacity_percent, 0, 100) / 100.0;
+-    color.setAlpha(static_cast<int>(std::lround(color.alpha() * multiplier)));
+-    return color;
++    if (rect.width() <= 0.0 || rect.height() <= 0.0) {
++        return;
++    }
++    QPainterPath path;
++    path.addRoundedRect(rect, std::max(0.0, radius), std::max(0.0, radius));
++    painter.fillPath(path, brush);
++}
++
++void draw_progress_classic(QPainter& painter, const QRectF& bar, double ratio,
++                           const RenderConfig& config)
++{
++    fill_rounded(painter, bar, bar.height() * 0.5,
++                 gradient_brush(config.progress_background, bar));
++    if (ratio <= 0.0) {
++        return;
++    }
++    QRectF fill = bar;
++    fill.setWidth(bar.width() * ratio);
++    const double radius = std::min(bar.height() * 0.5, fill.width() * 0.5);
++    fill_rounded(painter, fill, radius, gradient_brush(config.progress, bar));
++}
++
++void draw_progress_slim(QPainter& painter, const QRectF& bar, double ratio,
++                        const RenderConfig& config)
++{
++    const double line_height = std::max(1.0, bar.height() * 0.38);
++    const QRectF rail(bar.left(), bar.center().y() - line_height * 0.5, bar.width(), line_height);
++    fill_rounded(painter, rail, line_height * 0.5,
++                 gradient_brush(config.progress_background, bar));
++    if (ratio > 0.0) {
++        QRectF fill = rail;
++        fill.setWidth(rail.width() * ratio);
++        fill_rounded(painter, fill, std::min(line_height * 0.5, fill.width() * 0.5),
++                     gradient_brush(config.progress, bar));
++    }
++}
++
++void draw_progress_segmented(QPainter& painter, const QRectF& bar, double ratio,
++                             const RenderConfig& config)
++{
++    const int segments = std::clamp(static_cast<int>(bar.width() / std::max(24.0, bar.height() * 3.6)),
++                                    6, 32);
++    const double gap = std::clamp(bar.height() * 0.42, 1.5, 5.0);
++    const double total_gap = gap * static_cast<double>(segments - 1);
++    const double segment_width = std::max(1.0, (bar.width() - total_gap) / segments);
++    const QBrush background = gradient_brush(config.progress_background, bar);
++    const QBrush fill = gradient_brush(config.progress, bar);
++
++    auto draw_segments = [&](const QBrush& brush) {
++        for (int index = 0; index < segments; ++index) {
++            const double x = bar.left() + index * (segment_width + gap);
++            const QRectF segment(x, bar.top(), segment_width, bar.height());
++            fill_rounded(painter, segment, std::min(bar.height() * 0.35, segment_width * 0.35), brush);
++        }
++    };
++
++    draw_segments(background);
++    if (ratio > 0.0) {
++        painter.save();
++        painter.setClipRect(QRectF(bar.left(), bar.top(), bar.width() * ratio, bar.height()));
++        draw_segments(fill);
++        painter.restore();
++    }
++}
++
++void draw_progress_dots(QPainter& painter, const QRectF& bar, double ratio,
++                        const RenderConfig& config)
++{
++    const double diameter = std::max(2.0, bar.height());
++    const double usable_width = std::max(1.0, bar.width() - diameter);
++    const int dots = std::clamp(static_cast<int>(bar.width() / std::max(10.0, diameter * 1.65)), 8, 64);
++    const QBrush background = gradient_brush(config.progress_background, bar);
++    const QBrush fill = gradient_brush(config.progress, bar);
++
++    auto draw_dots = [&](const QBrush& brush) {
++        for (int index = 0; index < dots; ++index) {
++            const double t = dots <= 1 ? 0.0 : static_cast<double>(index) / (dots - 1);
++            const double x = bar.left() + diameter * 0.5 + usable_width * t;
++            painter.setPen(Qt::NoPen);
++            painter.setBrush(brush);
++            painter.drawEllipse(QPointF(x, bar.center().y()), diameter * 0.5, diameter * 0.5);
++        }
++    };
++
