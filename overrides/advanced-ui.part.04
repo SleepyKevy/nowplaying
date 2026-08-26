@@ -1,0 +1,54 @@
+     int album_size = 16;
+-    QColor title_color{255, 255, 255, 255};
+-    QColor artist_color{225, 228, 238, 255};
+-    QColor album_color{174, 180, 199, 255};
++    GradientStyle title{
++        GradientMode::solid,
++        QColor(255, 255, 255, 255),
++        QColor(197, 160, 255, 255),
++        QColor(120, 210, 255, 255),
++        0.0,
++    };
++    GradientStyle artist{
++        GradientMode::solid,
++        QColor(225, 228, 238, 255),
++        QColor(183, 156, 240, 255),
++        QColor(124, 198, 235, 255),
++        0.0,
++    };
++    GradientStyle album{
++        GradientMode::solid,
++        QColor(174, 180, 199, 255),
++        QColor(154, 130, 205, 255),
++        QColor(102, 160, 195, 255),
++        0.0,
++    };
+     TextAlignment text_alignment = TextAlignment::left;
+     bool show_album = true;
+     OverflowMode overflow_mode = OverflowMode::ellipsis;
+@@ -65,10 +114,22 @@ struct RenderConfig {
+ 
+     bool show_progress = true;
+     bool show_time = true;
+-    bool show_status = true;
+     int progress_height = 6;
+-    QColor progress_color{167, 102, 255, 255};
+-    QColor progress_background{255, 255, 255, 46};
++    ProgressStyle progress_style = ProgressStyle::classic;
++    GradientStyle progress{
++        GradientMode::solid,
++        QColor(167, 102, 255, 255),
++        QColor(211, 92, 255, 255),
++        QColor(74, 195, 255, 255),
++        0.0,
++    };
++    GradientStyle progress_background{
++        GradientMode::solid,
++        QColor(255, 255, 255, 46),
++        QColor(190, 170, 255, 46),
++        QColor(120, 200, 255, 46),
++        0.0,
++    };
+ 
+     bool hide_when_idle = true;
+     bool hide_when_paused = false;
