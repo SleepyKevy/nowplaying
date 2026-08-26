@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'OBS_Now_Playing_Complete_v1.0.0_BUILD_TOOLS_ONLY.zip'
+      - 'overrides/**'
       - '.github/workflows/build-windows.yml'
 
 jobs:
@@ -22,18 +23,33 @@ jobs:
         run: |
           Expand-Archive -Path './OBS_Now_Playing_Complete_v1.0.0_BUILD_TOOLS_ONLY.zip' -DestinationPath './source' -Force
 
-      - name: Fix Spotify callback port
+      - name: Apply Windows media session backend
         shell: pwsh
         run: |
-          $authPath = './source/src/spotify/spotify-auth-manager.cpp'
-          $auth = Get-Content -Raw $authPath
-          $auth = $auth.Replace('callback_server_.listen(QHostAddress(QHostAddress::LocalHost), 0)', 'callback_server_.listen(QHostAddress(QHostAddress::LocalHost), 8888)')
-          Set-Content -Path $authPath -Value $auth -Encoding utf8NoBOM -NoNewline
+          New-Item -ItemType Directory -Force './source/src/windows' | Out-Null
+          Copy-Item './overrides/CMakeLists.txt' './source/CMakeLists.txt' -Force
+          Copy-Item './overrides/src/plugin-main.cpp' './source/src/plugin-main.cpp' -Force
+          Copy-Item './overrides/src/windows/windows-media-playback-provider.hpp' './source/src/windows/windows-media-playback-provider.hpp' -Force
+          Copy-Item './overrides/src/windows/windows-media-playback-provider.cpp' './source/src/windows/windows-media-playback-provider.cpp' -Force
 
-          $dialogPath = './source/src/ui/spotify-connection-dialog.cpp'
-          $dialog = Get-Content -Raw $dialogPath
-          $dialog = $dialog.Replace('http://127.0.0.1/callback', 'http://127.0.0.1:8888/callback')
-          Set-Content -Path $dialogPath -Value $dialog -Encoding utf8NoBOM -NoNewline
+          $rendererPath = './source/src/render/card-renderer.cpp'
+          $renderer = Get-Content -Raw $rendererPath
+          $renderer = $renderer.Replace('Spotify not connected', 'Spotify Desktop not detected')
+          $renderer = $renderer.Replace('Connect Spotify from the OBS Tools menu', 'Start Spotify Desktop and play something')
+          Set-Content -Path $rendererPath -Value $renderer -Encoding utf8NoBOM -NoNewline
+
+          $localePath = './source/data/locale/en-US.ini'
+          $locale = Get-Content -Raw $localePath
+          $oldNotice = 'Connect Spotify from Tools > Now Playing: Spotify Connection. Customize this source here; enable Preview with sample song to design it while Spotify is idle.'
+          $newNotice = 'Uses Spotify Desktop through Windows Media Sessions. No Spotify Premium, Client ID, browser login, or redirect URI is required. Start Spotify Desktop and play something; use Preview with sample song while idle.'
+          $locale = $locale.Replace($oldNotice, $newNotice)
+          $locale = $locale.Replace('Spotify not connected', 'Spotify Desktop not detected')
+          Set-Content -Path $localePath -Value $locale -Encoding utf8NoBOM -NoNewline
+
+      - name: Validate project
+        shell: pwsh
+        working-directory: ./source
+        run: python tests/validate-project.py
 
       - name: Build and package plugin
         shell: pwsh
@@ -43,6 +59,6 @@ jobs:
       - name: Upload compiled OBS plugin
         uses: actions/upload-artifact@v4
         with:
-          name: OBS-Now-Playing-1.0.0-Windows-x64
+          name: OBS-Now-Playing-1.0.0-Windows-x64-GSMTC
           path: source/build_x64/OBS-Now-Playing-1.0.0-Windows-x64.zip
           if-no-files-found: error
