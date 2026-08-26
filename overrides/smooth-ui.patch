@@ -1,0 +1,232 @@
+--- a/src/render/render-config.hpp
++++ b/src/render/render-config.hpp
+@@ -43,6 +43,8 @@
+     QColor background_end{68, 35, 115, 242};
+     double gradient_angle = 18.0;
+     QColor border_color{255, 255, 255, 34};
++    int background_opacity = 100;
++    int border_opacity = 100;
+ 
+     bool show_artwork = true;
+     ArtworkSide artwork_side = ArtworkSide::left;
+--- a/src/render/card-renderer.cpp
++++ b/src/render/card-renderer.cpp
+@@ -159,6 +159,13 @@
+     return 1.0 - std::pow(1.0 - t, 3.0);
+ }
+ 
++QColor apply_opacity(QColor color, int opacity_percent)
++{
++    const double multiplier = std::clamp(opacity_percent, 0, 100) / 100.0;
++    color.setAlpha(static_cast<int>(std::lround(color.alpha() * multiplier)));
++    return color;
++}
++
+ } // namespace
+ 
+ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+@@ -193,21 +200,27 @@
+     QPainterPath card_path;
+     card_path.addRoundedRect(card, config.corner_radius, config.corner_radius);
+ 
+-    if (config.gradient_enabled) {
+-        const double radians = config.gradient_angle * pi / 180.0;
+-        const QPointF direction(std::cos(radians), std::sin(radians));
+-        const double radius = std::hypot(card.width(), card.height()) * 0.5;
+-        const QPointF center = card.center();
+-        QLinearGradient gradient(center - direction * radius, center + direction * radius);
+-        gradient.setColorAt(0.0, config.background_start);
+-        gradient.setColorAt(1.0, config.background_end);
+-        painter.fillPath(card_path, gradient);
+-    } else {
+-        painter.fillPath(card_path, config.background_start);
+-    }
+-
+-    if (config.border_width > 0 && config.border_color.alpha() > 0) {
+-        QPen border(config.border_color, config.border_width);
++    const QColor background_start = apply_opacity(config.background_start, config.background_opacity);
++    const QColor background_end = apply_opacity(config.background_end, config.background_opacity);
++    const QColor border_color = apply_opacity(config.border_color, config.border_opacity);
++
++    if (background_start.alpha() > 0 || (config.gradient_enabled && background_end.alpha() > 0)) {
++        if (config.gradient_enabled) {
++            const double radians = config.gradient_angle * pi / 180.0;
++            const QPointF direction(std::cos(radians), std::sin(radians));
++            const double radius = std::hypot(card.width(), card.height()) * 0.5;
++            const QPointF center = card.center();
++            QLinearGradient gradient(center - direction * radius, center + direction * radius);
++            gradient.setColorAt(0.0, background_start);
++            gradient.setColorAt(1.0, background_end);
++            painter.fillPath(card_path, gradient);
++        } else {
++            painter.fillPath(card_path, background_start);
++        }
++    }
++
++    if (config.border_width > 0 && border_color.alpha() > 0) {
++        QPen border(border_color, config.border_width);
+         border.setJoinStyle(Qt::RoundJoin);
+         painter.setPen(border);
+         painter.setBrush(Qt::NoBrush);
+--- a/src/obs/now-playing-source.cpp
++++ b/src/obs/now-playing-source.cpp
+@@ -23,8 +23,10 @@
+ 
+ constexpr std::uint32_t default_width = 700;
+ constexpr std::uint32_t default_height = 180;
+-constexpr double progress_refresh_seconds = 0.10;
+ constexpr double animation_refresh_seconds = 1.0 / 60.0;
++constexpr double seek_snap_threshold_ms = 2'000.0;
++constexpr double maximum_clock_correction_ms_per_second = 350.0;
++constexpr double clock_correction_gain = 3.0;
+ 
+ std::atomic<now_playing::PlaybackStateStore*> playback_store{nullptr};
+ 
+@@ -60,6 +62,9 @@
+     double transition_elapsed_seconds = 1.0;
+     double marquee_elapsed_seconds = 0.0;
+     double refresh_elapsed_seconds = 0.0;
++    double visual_progress_ms = 0.0;
++    std::string visual_progress_track_id;
++    bool visual_progress_initialized = false;
+     bool preview_active = false;
+ 
+     gs_texture_t* texture = nullptr;
+@@ -150,6 +155,10 @@
+     config.gradient_angle = obs_data_get_double(settings, "gradient_angle");
+     config.border_color =
+         to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "border_color")));
++    config.background_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "background_opacity"), 0, 100));
++    config.border_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "border_opacity"), 0, 100));
+ 
+     config.show_artwork = obs_data_get_bool(settings, "show_artwork");
+     config.artwork_side = parse_artwork_side(obs_data_get_string(settings, "artwork_side"));
+@@ -280,8 +289,12 @@
+     obs_properties_add_float_slider(background, "gradient_angle",
+                                     obs_module_text("NowPlayingSource.GradientAngle"), 0.0, 360.0,
+                                     1.0);
++    obs_properties_add_int_slider(background, "background_opacity",
++                                  obs_module_text("NowPlayingSource.BackgroundOpacity"), 0, 100, 1);
+     obs_properties_add_color_alpha(background, "border_color",
+                                    obs_module_text("NowPlayingSource.BorderColor"));
++    obs_properties_add_int_slider(background, "border_opacity",
++                                  obs_module_text("NowPlayingSource.BorderOpacity"), 0, 100, 1);
+     obs_properties_add_group(properties, "background_group",
+                              obs_module_text("NowPlayingSource.Background"), OBS_GROUP_NORMAL,
+                              background);
+@@ -391,6 +404,8 @@
+     obs_data_set_default_int(settings, "background_end", obs_rgba(68, 35, 115, 242));
+     obs_data_set_default_double(settings, "gradient_angle", 18.0);
+     obs_data_set_default_int(settings, "border_color", obs_rgba(255, 255, 255, 34));
++    obs_data_set_default_int(settings, "background_opacity", 100);
++    obs_data_set_default_int(settings, "border_opacity", 100);
+ 
+     obs_data_set_default_bool(settings, "show_artwork", true);
+     obs_data_set_default_string(settings, "artwork_side", "left");
+@@ -444,6 +459,60 @@
+     return state;
+ }
+ 
++void update_visual_progress(NowPlayingSourceContext* context,
++                            const now_playing::TrackState& playback, double elapsed_seconds)
++{
++    if (!context) {
++        return;
++    }
++
++    const double duration_ms = static_cast<double>(std::max<std::int64_t>(0, playback.duration_ms));
++    const double provider_progress_ms = static_cast<double>(playback.estimated_progress_ms());
++    const bool track_changed = context->visual_progress_track_id != playback.track_id;
++
++    if (!context->visual_progress_initialized || track_changed || duration_ms <= 0.0) {
++        context->visual_progress_track_id = playback.track_id;
++        context->visual_progress_ms = std::clamp(provider_progress_ms, 0.0, duration_ms);
++        context->visual_progress_initialized = true;
++        return;
++    }
++
++    if (playback.status != now_playing::PlaybackStatus::playing) {
++        context->visual_progress_ms = std::clamp(provider_progress_ms, 0.0, duration_ms);
++        return;
++    }
++
++    const double dt = std::clamp(elapsed_seconds, 0.0, 0.25);
++    const double predicted_progress_ms = context->visual_progress_ms + dt * 1'000.0;
++    const double error_ms = provider_progress_ms - predicted_progress_ms;
++
++    // Large differences are intentional seeks. Small provider-clock corrections are
++    // slewed into the local frame clock instead of snapping the bar. This keeps the
++    // progress edge and mm:ss counter moving monotonically and smoothly between
++    // Windows media-session timeline updates.
++    if (std::abs(error_ms) >= seek_snap_threshold_ms) {
++        context->visual_progress_ms = provider_progress_ms;
++    } else {
++        const double correction_ms_per_second = std::clamp(
++            error_ms * clock_correction_gain, -maximum_clock_correction_ms_per_second,
++            maximum_clock_correction_ms_per_second);
++        context->visual_progress_ms =
++            predicted_progress_ms + dt * correction_ms_per_second;
++    }
++
++    context->visual_progress_ms = std::clamp(context->visual_progress_ms, 0.0, duration_ms);
++}
++
++now_playing::TrackState make_render_state(const NowPlayingSourceContext* context)
++{
++    now_playing::TrackState state = context->playback;
++    if (context->visual_progress_initialized && state.duration_ms > 0) {
++        state.progress_ms = static_cast<std::int64_t>(std::llround(context->visual_progress_ms));
++        state.observed_at = std::chrono::steady_clock::now();
++    }
++    return state;
++}
++
+ void load_artwork_if_needed(NowPlayingSourceContext* context,
+                             const now_playing::TrackState& playback)
+ {
+@@ -539,6 +608,8 @@
+         context->redraw_requested = true;
+     }
+ 
++    update_visual_progress(context, context->playback, std::max(0.0f, seconds));
++
+     const double transition_duration = std::max(0.001, config.transition_duration_ms / 1'000.0);
+     if (context->transition_elapsed_seconds < transition_duration) {
+         context->transition_elapsed_seconds += std::max(0.0f, seconds);
+@@ -550,8 +621,11 @@
+     const bool progress_is_moving = context->playback.status == now_playing::PlaybackStatus::playing &&
+                                     (config.show_progress || config.show_time);
+     const bool marquee_is_moving = config.overflow_mode == now_playing::OverflowMode::marquee;
+-    if ((progress_is_moving && context->refresh_elapsed_seconds >= progress_refresh_seconds) ||
++    if (progress_is_moving ||
+         (marquee_is_moving && context->refresh_elapsed_seconds >= animation_refresh_seconds)) {
++        // Progress rendering follows OBS's video tick instead of a 10 FPS timer.
++        // QRectF/QPainter preserve sub-pixel progress, so the bar edge can move
++        // smoothly even when it advances by less than one pixel per frame.
+         context->redraw_requested = true;
+     }
+ 
+@@ -563,8 +637,9 @@
+     const double animation_progress = std::clamp(context->transition_elapsed_seconds /
+                                                      transition_duration,
+                                                  0.0, 1.0);
++    const now_playing::TrackState render_state = make_render_state(context);
+     const QImage frame = now_playing::CardRenderer::render(
+-        context->playback, context->artwork, config, animation_progress,
++        render_state, context->artwork, config, animation_progress,
+         context->marquee_elapsed_seconds);
+     upload_texture(context, frame);
+ }
+--- a/data/locale/en-US.ini
++++ b/data/locale/en-US.ini
+@@ -11,6 +11,8 @@
+ NowPlayingSource.BackgroundEnd="Gradient end color"
+ NowPlayingSource.GradientAngle="Gradient angle"
+ NowPlayingSource.BorderColor="Border color"
++NowPlayingSource.BackgroundOpacity="Background opacity (0 = transparent)"
++NowPlayingSource.BorderOpacity="Border opacity (0 = transparent)"
+ NowPlayingSource.Artwork="Artwork"
+ NowPlayingSource.ShowArtwork="Show artwork"
+ NowPlayingSource.ArtworkSide="Artwork position"
