@@ -1,0 +1,242 @@
++    draw_dots(background);
++    if (ratio > 0.0) {
++        painter.save();
++        painter.setClipRect(QRectF(bar.left(), bar.top(), bar.width() * ratio, bar.height()));
++        draw_dots(fill);
++        painter.restore();
++    }
++}
++
++void draw_progress_slider(QPainter& painter, const QRectF& bar, double ratio,
++                          const RenderConfig& config)
++{
++    const double knob_diameter = std::max(3.0, bar.height());
++    const double knob_radius = knob_diameter * 0.5;
++    const double rail_height = std::max(1.5, bar.height() * 0.30);
++    const double rail_left = bar.left() + knob_radius;
++    const double rail_width = std::max(1.0, bar.width() - knob_diameter);
++    const QRectF rail(rail_left, bar.center().y() - rail_height * 0.5, rail_width, rail_height);
++    fill_rounded(painter, rail, rail_height * 0.5,
++                 gradient_brush(config.progress_background, bar));
++
++    const double progress_x = rail.left() + rail.width() * ratio;
++    if (ratio > 0.0) {
++        QRectF fill = rail;
++        fill.setWidth(rail.width() * ratio);
++        fill_rounded(painter, fill, rail_height * 0.5, gradient_brush(config.progress, bar));
++    }
++
++    painter.setPen(Qt::NoPen);
++    painter.setBrush(gradient_brush(config.progress, bar));
++    painter.drawEllipse(QPointF(progress_x, bar.center().y()), knob_radius, knob_radius);
++}
++
++void draw_progress_bar(QPainter& painter, const QRectF& bar, double ratio,
++                       const RenderConfig& config)
++{
++    ratio = std::clamp(ratio, 0.0, 1.0);
++    switch (config.progress_style) {
++    case ProgressStyle::slim:
++        draw_progress_slim(painter, bar, ratio, config);
++        break;
++    case ProgressStyle::segmented:
++        draw_progress_segmented(painter, bar, ratio, config);
++        break;
++    case ProgressStyle::dots:
++        draw_progress_dots(painter, bar, ratio, config);
++        break;
++    case ProgressStyle::slider:
++        draw_progress_slider(painter, bar, ratio, config);
++        break;
++    case ProgressStyle::classic:
++    default:
++        draw_progress_classic(painter, bar, ratio, config);
++        break;
++    }
+ }
+ 
+ } // namespace
+@@ -200,32 +397,17 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+     QPainterPath card_path;
+     card_path.addRoundedRect(card, config.corner_radius, config.corner_radius);
+ 
+-    const QColor background_start = apply_opacity(config.background_start, config.background_opacity);
+-    const QColor background_end = apply_opacity(config.background_end, config.background_opacity);
+-    const QColor border_color = apply_opacity(config.border_color, config.border_opacity);
+-
+-    if (background_start.alpha() > 0 || (config.gradient_enabled && background_end.alpha() > 0)) {
+-        if (config.gradient_enabled) {
+-            const double radians = config.gradient_angle * pi / 180.0;
+-            const QPointF direction(std::cos(radians), std::sin(radians));
+-            const double radius = std::hypot(card.width(), card.height()) * 0.5;
+-            const QPointF center = card.center();
+-            QLinearGradient gradient(center - direction * radius, center + direction * radius);
+-            gradient.setColorAt(0.0, background_start);
+-            gradient.setColorAt(1.0, background_end);
+-            painter.fillPath(card_path, gradient);
+-        } else {
+-            painter.fillPath(card_path, background_start);
+-        }
++    if (style_visible(config.background, config.background_opacity)) {
++        painter.fillPath(card_path, gradient_brush(config.background, card, config.background_opacity));
+     }
+ 
+-    if (config.border_width > 0 && border_color.alpha() > 0) {
+-        QPen border(border_color, config.border_width);
+-        border.setJoinStyle(Qt::RoundJoin);
+-        painter.setPen(border);
+-        painter.setBrush(Qt::NoBrush);
++    if (config.border_width > 0 && style_visible(config.border, config.border_opacity)) {
+         const double inset = config.border_width * 0.5;
+-        painter.drawRoundedRect(card.adjusted(inset, inset, -inset, -inset),
++        const QRectF border_bounds = card.adjusted(inset, inset, -inset, -inset);
++        set_gradient_pen(painter, config.border, border_bounds, config.border_width,
++                         config.border_opacity);
++        painter.setBrush(Qt::NoBrush);
++        painter.drawRoundedRect(border_bounds,
+                                 std::max(0, config.corner_radius - config.border_width / 2),
+                                 std::max(0, config.corner_radius - config.border_width / 2));
+     }
+@@ -247,11 +429,11 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+             content.setLeft(artwork_bounds.right() + padding);
+         }
+         draw_artwork(painter, artwork, artwork_bounds, config.artwork_corner_radius,
+-                     config.progress_color);
++                     config.progress);
+     }
+ 
+     const int progress_height = std::max(1, config.progress_height);
+-    const int time_height = config.show_time || config.show_status ? 19 : 0;
++    const int time_height = config.show_time ? 19 : 0;
+     const int progress_area_height = config.show_progress ? progress_height + 8 + time_height : 0;
+     QRectF text_area = content;
+     text_area.setBottom(std::max(text_area.top(), content.bottom() - progress_area_height));
+@@ -269,7 +451,7 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+                                 text_gap * (album_height > 0.0 ? 2.0 : 1.0);
+     double y = text_area.top() + std::max(0.0, (text_area.height() - block_height) * 0.5);
+ 
+-    draw_line(painter, display_title(state), title_font, config.title_color,
++    draw_line(painter, display_title(state), title_font, config.title,
+               QRectF(text_area.left(), y, text_area.width(), title_height), config.text_alignment,
+               config.overflow_mode, marquee_seconds, config.marquee_speed);
+     y += title_height + text_gap;
+@@ -277,13 +459,13 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+     const QString artist = state.artists.empty() && !state.has_content()
+                                ? QStringLiteral("Start Spotify Desktop and play something")
+                                : QString::fromStdString(state.artists);
+-    draw_line(painter, artist, artist_font, config.artist_color,
++    draw_line(painter, artist, artist_font, config.artist,
+               QRectF(text_area.left(), y, text_area.width(), artist_height), config.text_alignment,
+               config.overflow_mode, marquee_seconds, config.marquee_speed);
+     y += artist_height + text_gap;
+ 
+     if (album_height > 0.0) {
+-        draw_line(painter, QString::fromStdString(state.album), album_font, config.album_color,
++        draw_line(painter, QString::fromStdString(state.album), album_font, config.album,
+                   QRectF(text_area.left(), y, text_area.width(), album_height), config.text_alignment,
+                   config.overflow_mode, marquee_seconds, config.marquee_speed);
+     }
+@@ -291,35 +473,18 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+     if (config.show_progress) {
+         const double bar_y = content.bottom() - progress_height;
+         const QRectF bar(content.left(), bar_y, content.width(), progress_height);
+-        QPainterPath background_path;
+-        background_path.addRoundedRect(bar, progress_height * 0.5, progress_height * 0.5);
+-        painter.fillPath(background_path, config.progress_background);
+-
+-        const double ratio = std::clamp(state.progress_ratio(), 0.0, 1.0);
+-        if (ratio > 0.0) {
+-            QRectF fill = bar;
+-            fill.setWidth(std::max<double>(progress_height, bar.width() * ratio));
+-            QPainterPath fill_path;
+-            fill_path.addRoundedRect(fill, progress_height * 0.5, progress_height * 0.5);
+-            painter.fillPath(fill_path, config.progress_color);
+-        }
++        draw_progress_bar(painter, bar, state.progress_ratio(), config);
+ 
+         if (time_height > 0) {
+             const QFont time_font = sized_font(config, std::max(10, config.album_size - 2), false);
+             painter.setFont(time_font);
+-            painter.setPen(config.album_color);
+             const QRectF time_bounds(content.left(), bar.top() - time_height - 5, content.width(),
+                                      time_height);
+-            if (config.show_time) {
+-                painter.drawText(time_bounds, Qt::AlignLeft | Qt::AlignVCenter,
+-                                 format_time(state.estimated_progress_ms()));
+-                painter.drawText(time_bounds, Qt::AlignRight | Qt::AlignVCenter,
+-                                 format_time(state.duration_ms));
+-            }
+-            if (config.show_status) {
+-                painter.drawText(time_bounds, Qt::AlignCenter | Qt::AlignVCenter,
+-                                 status_text(state.status));
+-            }
++            set_gradient_pen(painter, config.album, time_bounds);
++            painter.drawText(time_bounds, Qt::AlignLeft | Qt::AlignVCenter,
++                             format_time(state.estimated_progress_ms()));
++            painter.drawText(time_bounds, Qt::AlignRight | Qt::AlignVCenter,
++                             format_time(state.duration_ms));
+         }
+     }
+ 
+ diff --git a/src/render/render-config.hpp b/src/render/render-config.hpp
+index 83e965d..f2e175e 100644
+--- a/src/render/render-config.hpp
++++ b/src/render/render-config.hpp
+@@ -31,6 +31,28 @@ enum class TransitionStyle {
+     slide_left,
+ };
+ 
++enum class GradientMode {
++    solid,
++    two_color,
++    three_color,
++};
++
++enum class ProgressStyle {
++    classic,
++    slim,
++    segmented,
++    dots,
++    slider,
++};
++
++struct GradientStyle {
++    GradientMode mode = GradientMode::solid;
++    QColor color1{255, 255, 255, 255};
++    QColor color2{167, 102, 255, 255};
++    QColor color3{80, 190, 255, 255};
++    double angle = 0.0;
++};
++
+ struct RenderConfig {
+     std::uint32_t width = 700;
+     std::uint32_t height = 180;
+@@ -38,11 +60,20 @@ struct RenderConfig {
+     int corner_radius = 22;
+     int border_width = 1;
+ 
+-    bool gradient_enabled = true;
+-    QColor background_start{18, 23, 42, 242};
+-    QColor background_end{68, 35, 115, 242};
+-    double gradient_angle = 18.0;
+-    QColor border_color{255, 255, 255, 34};
++    GradientStyle background{
++        GradientMode::two_color,
++        QColor(18, 23, 42, 242),
++        QColor(43, 29, 79, 242),
++        QColor(68, 35, 115, 242),
++        18.0,
++    };
++    GradientStyle border{
++        GradientMode::solid,
++        QColor(255, 255, 255, 34),
++        QColor(167, 102, 255, 80),
++        QColor(80, 190, 255, 80),
++        0.0,
++    };
+     int background_opacity = 100;
+     int border_opacity = 100;
+ 
+@@ -55,9 +86,27 @@ struct RenderConfig {
+     int title_size = 28;
+     int artist_size = 20;
