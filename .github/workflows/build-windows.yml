@@ -46,6 +46,10 @@ jobs:
           $locale = $locale.Replace('Spotify not connected', 'Spotify Desktop not detected')
           Set-Content -Path $localePath -Value $locale -Encoding utf8NoBOM -NoNewline
 
+      - name: Apply smooth progress and transparency controls
+        shell: pwsh
+        run: git apply --directory=source ./overrides/smooth-ui.patch
+
       - name: Validate project
         shell: pwsh
         working-directory: ./source
@@ -59,6 +63,6 @@ jobs:
       - name: Upload compiled OBS plugin
         uses: actions/upload-artifact@v4
         with:
-          name: OBS-Now-Playing-1.0.0-Windows-x64-GSMTC
+          name: OBS-Now-Playing-1.0.0-Windows-x64-GSMTC-Smooth
           path: source/build_x64/OBS-Now-Playing-1.0.0-Windows-x64.zip
           if-no-files-found: error
