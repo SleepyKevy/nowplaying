@@ -21,6 +21,19 @@ jobs:
         run: |
           Expand-Archive -Path './OBS_Now_Playing_Complete_v1.0.0_BUILD_TOOLS_ONLY.zip' -DestinationPath './source' -Force
 
+      - name: Fix Spotify callback port
+        shell: pwsh
+        run: |
+          $authPath = './source/src/spotify/spotify-auth-manager.cpp'
+          $auth = Get-Content -Raw $authPath
+          $auth = $auth.Replace('callback_server_.listen(QHostAddress(QHostAddress::LocalHost), 0)', 'callback_server_.listen(QHostAddress(QHostAddress::LocalHost), 8888)')
+          Set-Content -Path $authPath -Value $auth -Encoding utf8NoBOM -NoNewline
+
+          $dialogPath = './source/src/ui/spotify-connection-dialog.cpp'
+          $dialog = Get-Content -Raw $dialogPath
+          $dialog = $dialog.Replace('http://127.0.0.1/callback', 'http://127.0.0.1:8888/callback')
+          Set-Content -Path $dialogPath -Value $dialog -Encoding utf8NoBOM -NoNewline
+
       - name: Build and package plugin
         shell: pwsh
         working-directory: ./source
