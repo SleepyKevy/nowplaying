@@ -14,6 +14,23 @@ if(NOWPLAYING_SCAFFOLD_ONLY)
     return()
 endif()
 
+# Windows dependency bootstrap from the build-tools package. This downloads
+# the matching OBS and Qt development dependencies on the GitHub runner.
+if(WIN32)
+    if(NOT CMAKE_GENERATOR STREQUAL "Visual Studio 17 2022")
+        message(FATAL_ERROR
+            "The Windows preset expects the Visual Studio 17 2022 generator. "
+            "Use the supplied windows-x64 preset.")
+    endif()
+
+    list(APPEND CMAKE_MODULE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/common"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/windows"
+    )
+    set(OS_WINDOWS TRUE)
+    include(buildspec)
+endif()
+
 add_library(${PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
@@ -25,8 +42,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 
-# C++/WinRT is provided by the Windows SDK. windowsapp.lib supplies the
-# Windows Runtime import library used by GSMTC.
+# C++/WinRT headers come from the Windows SDK and windowsapp.lib provides the
+# Windows Runtime import library used by Global System Media Transport Controls.
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE windowsapp)
 endif()
