@@ -1,0 +1,148 @@
+-    obs_properties_add_bool(background, "gradient_enabled",
+-                            obs_module_text("NowPlayingSource.GradientEnabled"));
+-    obs_properties_add_color_alpha(background, "background_start",
+-                                   obs_module_text("NowPlayingSource.BackgroundStart"));
+-    obs_properties_add_color_alpha(background, "background_end",
+-                                   obs_module_text("NowPlayingSource.BackgroundEnd"));
+-    obs_properties_add_float_slider(background, "gradient_angle",
+-                                    obs_module_text("NowPlayingSource.GradientAngle"), 0.0, 360.0,
+-                                    1.0);
++    add_gradient_controls(background, "background_gradient_mode",
++                          "NowPlayingSource.BackgroundGradientMode", "background_start",
++                          "NowPlayingSource.BackgroundColor1", "background_mid",
++                          "NowPlayingSource.BackgroundColor2", "background_end",
++                          "NowPlayingSource.BackgroundColor3", "gradient_angle",
++                          "NowPlayingSource.BackgroundGradientAngle");
+     obs_properties_add_int_slider(background, "background_opacity",
+                                   obs_module_text("NowPlayingSource.BackgroundOpacity"), 0, 100, 1);
+-    obs_properties_add_color_alpha(background, "border_color",
+-                                   obs_module_text("NowPlayingSource.BorderColor"));
++    add_gradient_controls(background, "border_gradient_mode",
++                          "NowPlayingSource.BorderGradientMode", "border_color",
++                          "NowPlayingSource.BorderColor1", "border_color_2",
++                          "NowPlayingSource.BorderColor2", "border_color_3",
++                          "NowPlayingSource.BorderColor3", "border_gradient_angle",
++                          "NowPlayingSource.BorderGradientAngle");
+     obs_properties_add_int_slider(background, "border_opacity",
+                                   obs_module_text("NowPlayingSource.BorderOpacity"), 0, 100, 1);
+     obs_properties_add_group(properties, "background_group",
+@@ -323,12 +397,24 @@ obs_properties_t* source_properties(void*)
+                                   obs_module_text("NowPlayingSource.ArtistSize"), 8, 96, 1);
+     obs_properties_add_int_slider(typography, "album_size",
+                                   obs_module_text("NowPlayingSource.AlbumSize"), 8, 72, 1);
+-    obs_properties_add_color_alpha(typography, "title_color",
+-                                   obs_module_text("NowPlayingSource.TitleColor"));
+-    obs_properties_add_color_alpha(typography, "artist_color",
+-                                   obs_module_text("NowPlayingSource.ArtistColor"));
+-    obs_properties_add_color_alpha(typography, "album_color",
+-                                   obs_module_text("NowPlayingSource.AlbumColor"));
++    add_gradient_controls(typography, "title_gradient_mode",
++                          "NowPlayingSource.TitleGradientMode", "title_color",
++                          "NowPlayingSource.TitleColor1", "title_color_2",
++                          "NowPlayingSource.TitleColor2", "title_color_3",
++                          "NowPlayingSource.TitleColor3", "title_gradient_angle",
++                          "NowPlayingSource.TitleGradientAngle");
++    add_gradient_controls(typography, "artist_gradient_mode",
++                          "NowPlayingSource.ArtistGradientMode", "artist_color",
++                          "NowPlayingSource.ArtistColor1", "artist_color_2",
++                          "NowPlayingSource.ArtistColor2", "artist_color_3",
++                          "NowPlayingSource.ArtistColor3", "artist_gradient_angle",
++                          "NowPlayingSource.ArtistGradientAngle");
++    add_gradient_controls(typography, "album_gradient_mode",
++                          "NowPlayingSource.AlbumGradientMode", "album_color",
++                          "NowPlayingSource.AlbumColor1", "album_color_2",
++                          "NowPlayingSource.AlbumColor2", "album_color_3",
++                          "NowPlayingSource.AlbumColor3", "album_gradient_angle",
++                          "NowPlayingSource.AlbumGradientAngle");
+     obs_property_t* text_alignment = obs_properties_add_list(
+         typography, "text_alignment", obs_module_text("NowPlayingSource.TextAlignment"),
+         OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+@@ -353,14 +439,29 @@ obs_properties_t* source_properties(void*)
+     obs_properties_add_bool(progress, "show_progress",
+                             obs_module_text("NowPlayingSource.ShowProgress"));
+     obs_properties_add_bool(progress, "show_time", obs_module_text("NowPlayingSource.ShowTime"));
+-    obs_properties_add_bool(progress, "show_status",
+-                            obs_module_text("NowPlayingSource.ShowStatus"));
++    obs_property_t* progress_style = obs_properties_add_list(
++        progress, "progress_style", obs_module_text("NowPlayingSource.ProgressStyle"),
++        OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
++    add_list_item(progress_style, "NowPlayingSource.ProgressClassic", "classic");
++    add_list_item(progress_style, "NowPlayingSource.ProgressSlim", "slim");
++    add_list_item(progress_style, "NowPlayingSource.ProgressSegmented", "segmented");
++    add_list_item(progress_style, "NowPlayingSource.ProgressDots", "dots");
++    add_list_item(progress_style, "NowPlayingSource.ProgressSlider", "slider");
+     obs_properties_add_int_slider(progress, "progress_height",
+                                   obs_module_text("NowPlayingSource.ProgressHeight"), 2, 30, 1);
+-    obs_properties_add_color_alpha(progress, "progress_color",
+-                                   obs_module_text("NowPlayingSource.ProgressColor"));
+-    obs_properties_add_color_alpha(progress, "progress_background",
+-                                   obs_module_text("NowPlayingSource.ProgressBackground"));
++    add_gradient_controls(progress, "progress_gradient_mode",
++                          "NowPlayingSource.ProgressGradientMode", "progress_color",
++                          "NowPlayingSource.ProgressColor1", "progress_color_2",
++                          "NowPlayingSource.ProgressColor2", "progress_color_3",
++                          "NowPlayingSource.ProgressColor3", "progress_gradient_angle",
++                          "NowPlayingSource.ProgressGradientAngle");
++    add_gradient_controls(progress, "progress_background_gradient_mode",
++                          "NowPlayingSource.ProgressBackgroundGradientMode", "progress_background",
++                          "NowPlayingSource.ProgressBackgroundColor1", "progress_background_2",
++                          "NowPlayingSource.ProgressBackgroundColor2", "progress_background_3",
++                          "NowPlayingSource.ProgressBackgroundColor3",
++                          "progress_background_gradient_angle",
++                          "NowPlayingSource.ProgressBackgroundGradientAngle");
+     obs_properties_add_group(properties, "progress_group",
+                              obs_module_text("NowPlayingSource.Progress"), OBS_GROUP_NORMAL,
+                              progress);
+@@ -399,11 +500,16 @@ void source_defaults(obs_data_t* settings)
+     obs_data_set_default_int(settings, "corner_radius", 22);
+     obs_data_set_default_int(settings, "border_width", 1);
+ 
+-    obs_data_set_default_bool(settings, "gradient_enabled", true);
++    obs_data_set_default_string(settings, "background_gradient_mode", "two");
+     obs_data_set_default_int(settings, "background_start", obs_rgba(18, 23, 42, 242));
++    obs_data_set_default_int(settings, "background_mid", obs_rgba(43, 29, 79, 242));
+     obs_data_set_default_int(settings, "background_end", obs_rgba(68, 35, 115, 242));
+     obs_data_set_default_double(settings, "gradient_angle", 18.0);
++    obs_data_set_default_string(settings, "border_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "border_color", obs_rgba(255, 255, 255, 34));
++    obs_data_set_default_int(settings, "border_color_2", obs_rgba(167, 102, 255, 80));
++    obs_data_set_default_int(settings, "border_color_3", obs_rgba(80, 190, 255, 80));
++    obs_data_set_default_double(settings, "border_gradient_angle", 0.0);
+     obs_data_set_default_int(settings, "background_opacity", 100);
+     obs_data_set_default_int(settings, "border_opacity", 100);
+ 
+@@ -421,9 +527,21 @@ void source_defaults(obs_data_t* settings)
+     obs_data_set_default_int(settings, "title_size", 28);
+     obs_data_set_default_int(settings, "artist_size", 20);
+     obs_data_set_default_int(settings, "album_size", 16);
++    obs_data_set_default_string(settings, "title_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "title_color", obs_rgba(255, 255, 255));
++    obs_data_set_default_int(settings, "title_color_2", obs_rgba(197, 160, 255));
++    obs_data_set_default_int(settings, "title_color_3", obs_rgba(120, 210, 255));
++    obs_data_set_default_double(settings, "title_gradient_angle", 0.0);
++    obs_data_set_default_string(settings, "artist_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "artist_color", obs_rgba(225, 228, 238));
++    obs_data_set_default_int(settings, "artist_color_2", obs_rgba(183, 156, 240));
++    obs_data_set_default_int(settings, "artist_color_3", obs_rgba(124, 198, 235));
++    obs_data_set_default_double(settings, "artist_gradient_angle", 0.0);
++    obs_data_set_default_string(settings, "album_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "album_color", obs_rgba(174, 180, 199));
++    obs_data_set_default_int(settings, "album_color_2", obs_rgba(154, 130, 205));
++    obs_data_set_default_int(settings, "album_color_3", obs_rgba(102, 160, 195));
++    obs_data_set_default_double(settings, "album_gradient_angle", 0.0);
+     obs_data_set_default_string(settings, "text_alignment", "left");
+     obs_data_set_default_bool(settings, "show_album", true);
+     obs_data_set_default_string(settings, "overflow_mode", "ellipsis");
+@@ -431,10 +549,18 @@ void source_defaults(obs_data_t* settings)
+ 
+     obs_data_set_default_bool(settings, "show_progress", true);
+     obs_data_set_default_bool(settings, "show_time", true);
+-    obs_data_set_default_bool(settings, "show_status", true);
++    obs_data_set_default_string(settings, "progress_style", "classic");
+     obs_data_set_default_int(settings, "progress_height", 6);
++    obs_data_set_default_string(settings, "progress_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "progress_color", obs_rgba(167, 102, 255));
++    obs_data_set_default_int(settings, "progress_color_2", obs_rgba(211, 92, 255));
++    obs_data_set_default_int(settings, "progress_color_3", obs_rgba(74, 195, 255));
++    obs_data_set_default_double(settings, "progress_gradient_angle", 0.0);
++    obs_data_set_default_string(settings, "progress_background_gradient_mode", "solid");
