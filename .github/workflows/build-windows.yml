@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'OBS_Now_Playing_Complete_v1.0.0_BUILD_TOOLS_ONLY.zip'
+      - '.github/workflows/build-windows.yml'
 
 jobs:
   build-windows:
