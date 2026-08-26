@@ -1,0 +1,206 @@
+diff --git a/data/locale/en-US.ini b/data/locale/en-US.ini
+index 3e5573f..9ecf093 100644
+--- a/data/locale/en-US.ini
++++ b/data/locale/en-US.ini
+@@ -78,3 +78,47 @@ SpotifyPlayback.Unavailable="Spotify Desktop not detected"
+ SpotifyPlayback.Artist="Artist"
+ SpotifyPlayback.Album="Album"
+ SpotifyPlayback.NoArtwork="No artwork"
++NowPlayingSource.Solid="Solid color"
++NowPlayingSource.TwoColorGradient="2-color gradient"
++NowPlayingSource.ThreeColorGradient="3-color gradient"
++NowPlayingSource.BackgroundGradientMode="Background color mode"
++NowPlayingSource.BackgroundColor1="Background color 1"
++NowPlayingSource.BackgroundColor2="Background color 2"
++NowPlayingSource.BackgroundColor3="Background color 3"
++NowPlayingSource.BackgroundGradientAngle="Background gradient angle"
++NowPlayingSource.BorderGradientMode="Border color mode"
++NowPlayingSource.BorderColor1="Border color 1"
++NowPlayingSource.BorderColor2="Border color 2"
++NowPlayingSource.BorderColor3="Border color 3"
++NowPlayingSource.BorderGradientAngle="Border gradient angle"
++NowPlayingSource.TitleGradientMode="Title color mode"
++NowPlayingSource.TitleColor1="Title color 1"
++NowPlayingSource.TitleColor2="Title color 2"
++NowPlayingSource.TitleColor3="Title color 3"
++NowPlayingSource.TitleGradientAngle="Title gradient angle"
++NowPlayingSource.ArtistGradientMode="Artist color mode"
++NowPlayingSource.ArtistColor1="Artist color 1"
++NowPlayingSource.ArtistColor2="Artist color 2"
++NowPlayingSource.ArtistColor3="Artist color 3"
++NowPlayingSource.ArtistGradientAngle="Artist gradient angle"
++NowPlayingSource.AlbumGradientMode="Album / time color mode"
++NowPlayingSource.AlbumColor1="Album / time color 1"
++NowPlayingSource.AlbumColor2="Album / time color 2"
++NowPlayingSource.AlbumColor3="Album / time color 3"
++NowPlayingSource.AlbumGradientAngle="Album / time gradient angle"
++NowPlayingSource.ProgressStyle="Progress bar style"
++NowPlayingSource.ProgressClassic="Classic rounded"
++NowPlayingSource.ProgressSlim="Slim line"
++NowPlayingSource.ProgressSegmented="Segmented"
++NowPlayingSource.ProgressDots="Dots"
++NowPlayingSource.ProgressSlider="Slider + knob"
++NowPlayingSource.ProgressGradientMode="Progress fill color mode"
++NowPlayingSource.ProgressColor1="Progress fill color 1"
++NowPlayingSource.ProgressColor2="Progress fill color 2"
++NowPlayingSource.ProgressColor3="Progress fill color 3"
++NowPlayingSource.ProgressGradientAngle="Progress fill gradient angle"
++NowPlayingSource.ProgressBackgroundGradientMode="Progress track color mode"
++NowPlayingSource.ProgressBackgroundColor1="Progress track color 1"
++NowPlayingSource.ProgressBackgroundColor2="Progress track color 2"
++NowPlayingSource.ProgressBackgroundColor3="Progress track color 3"
++NowPlayingSource.ProgressBackgroundGradientAngle="Progress track gradient angle"
+diff --git a/src/obs/now-playing-source.cpp b/src/obs/now-playing-source.cpp
+index 5666e8d..9db6ca5 100644
+--- a/src/obs/now-playing-source.cpp
++++ b/src/obs/now-playing-source.cpp
+@@ -115,6 +115,50 @@ now_playing::TransitionStyle parse_transition(const char* value)
+     return now_playing::TransitionStyle::none;
+ }
+ 
++now_playing::GradientMode parse_gradient_mode(const char* value)
++{
++    if (value && std::string(value) == "three") {
++        return now_playing::GradientMode::three_color;
++    }
++    if (value && std::string(value) == "two") {
++        return now_playing::GradientMode::two_color;
++    }
++    return now_playing::GradientMode::solid;
++}
++
++now_playing::ProgressStyle parse_progress_style(const char* value)
++{
++    if (value && std::string(value) == "slim") {
++        return now_playing::ProgressStyle::slim;
++    }
++    if (value && std::string(value) == "segmented") {
++        return now_playing::ProgressStyle::segmented;
++    }
++    if (value && std::string(value) == "dots") {
++        return now_playing::ProgressStyle::dots;
++    }
++    if (value && std::string(value) == "slider") {
++        return now_playing::ProgressStyle::slider;
++    }
++    return now_playing::ProgressStyle::classic;
++}
++
++now_playing::GradientStyle read_gradient(obs_data_t* settings, const char* mode_key,
++                                         const char* color1_key, const char* color2_key,
++                                         const char* color3_key, const char* angle_key)
++{
++    now_playing::GradientStyle style;
++    style.mode = parse_gradient_mode(obs_data_get_string(settings, mode_key));
++    style.color1 =
++        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, color1_key)));
++    style.color2 =
++        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, color2_key)));
++    style.color3 =
++        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, color3_key)));
++    style.angle = obs_data_get_double(settings, angle_key);
++    return style;
++}
++
+ QFont read_font(obs_data_t* settings)
+ {
+     QFont font(QStringLiteral("Segoe UI"));
+@@ -147,14 +191,12 @@ now_playing::RenderConfig read_config(obs_data_t* settings)
+     config.corner_radius = static_cast<int>(obs_data_get_int(settings, "corner_radius"));
+     config.border_width = static_cast<int>(obs_data_get_int(settings, "border_width"));
+ 
+-    config.gradient_enabled = obs_data_get_bool(settings, "gradient_enabled");
+-    config.background_start =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "background_start")));
+-    config.background_end =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "background_end")));
+-    config.gradient_angle = obs_data_get_double(settings, "gradient_angle");
+-    config.border_color =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "border_color")));
++    config.background =
++        read_gradient(settings, "background_gradient_mode", "background_start", "background_mid",
++                      "background_end", "gradient_angle");
++    config.border =
++        read_gradient(settings, "border_gradient_mode", "border_color", "border_color_2",
++                      "border_color_3", "border_gradient_angle");
+     config.background_opacity = static_cast<int>(
+         std::clamp<std::int64_t>(obs_data_get_int(settings, "background_opacity"), 0, 100));
+     config.border_opacity = static_cast<int>(
+@@ -170,12 +212,15 @@ now_playing::RenderConfig read_config(obs_data_t* settings)
+     config.title_size = static_cast<int>(obs_data_get_int(settings, "title_size"));
+     config.artist_size = static_cast<int>(obs_data_get_int(settings, "artist_size"));
+     config.album_size = static_cast<int>(obs_data_get_int(settings, "album_size"));
+-    config.title_color =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "title_color")));
+-    config.artist_color =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "artist_color")));
+-    config.album_color =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "album_color")));
++    config.title =
++        read_gradient(settings, "title_gradient_mode", "title_color", "title_color_2",
++                      "title_color_3", "title_gradient_angle");
++    config.artist =
++        read_gradient(settings, "artist_gradient_mode", "artist_color", "artist_color_2",
++                      "artist_color_3", "artist_gradient_angle");
++    config.album =
++        read_gradient(settings, "album_gradient_mode", "album_color", "album_color_2",
++                      "album_color_3", "album_gradient_angle");
+     config.text_alignment = parse_text_alignment(obs_data_get_string(settings, "text_alignment"));
+     config.show_album = obs_data_get_bool(settings, "show_album");
+     config.overflow_mode = parse_overflow(obs_data_get_string(settings, "overflow_mode"));
+@@ -183,12 +228,15 @@ now_playing::RenderConfig read_config(obs_data_t* settings)
+ 
+     config.show_progress = obs_data_get_bool(settings, "show_progress");
+     config.show_time = obs_data_get_bool(settings, "show_time");
+-    config.show_status = obs_data_get_bool(settings, "show_status");
+     config.progress_height = static_cast<int>(obs_data_get_int(settings, "progress_height"));
+-    config.progress_color =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "progress_color")));
++    config.progress_style = parse_progress_style(obs_data_get_string(settings, "progress_style"));
++    config.progress =
++        read_gradient(settings, "progress_gradient_mode", "progress_color", "progress_color_2",
++                      "progress_color_3", "progress_gradient_angle");
+     config.progress_background =
+-        to_qcolor(static_cast<std::uint32_t>(obs_data_get_int(settings, "progress_background")));
++        read_gradient(settings, "progress_background_gradient_mode", "progress_background",
++                      "progress_background_2", "progress_background_3",
++                      "progress_background_gradient_angle");
+ 
+     config.hide_when_idle = obs_data_get_bool(settings, "hide_when_idle");
+     config.hide_when_paused = obs_data_get_bool(settings, "hide_when_paused");
+@@ -261,6 +309,31 @@ void add_list_item(obs_property_t* property, const char* label_key, const char*
+     obs_property_list_add_string(property, obs_module_text(label_key), value);
+ }
+ 
++void add_gradient_mode_items(obs_property_t* property)
++{
++    add_list_item(property, "NowPlayingSource.Solid", "solid");
++    add_list_item(property, "NowPlayingSource.TwoColorGradient", "two");
++    add_list_item(property, "NowPlayingSource.ThreeColorGradient", "three");
++}
++
++void add_gradient_controls(obs_properties_t* properties, const char* mode_name,
++                           const char* mode_label_key, const char* color1_name,
++                           const char* color1_label_key, const char* color2_name,
++                           const char* color2_label_key, const char* color3_name,
++                           const char* color3_label_key, const char* angle_name,
++                           const char* angle_label_key)
++{
++    obs_property_t* mode = obs_properties_add_list(
++        properties, mode_name, obs_module_text(mode_label_key), OBS_COMBO_TYPE_LIST,
++        OBS_COMBO_FORMAT_STRING);
++    add_gradient_mode_items(mode);
++    obs_properties_add_color_alpha(properties, color1_name, obs_module_text(color1_label_key));
++    obs_properties_add_color_alpha(properties, color2_name, obs_module_text(color2_label_key));
++    obs_properties_add_color_alpha(properties, color3_name, obs_module_text(color3_label_key));
++    obs_properties_add_float_slider(properties, angle_name, obs_module_text(angle_label_key), 0.0,
++                                    360.0, 1.0);
++}
++
+ obs_properties_t* source_properties(void*)
+ {
+     obs_properties_t* properties = obs_properties_create();
+@@ -280,19 +353,20 @@ obs_properties_t* source_properties(void*)
+                              OBS_GROUP_NORMAL, layout);
+ 
+     obs_properties_t* background = obs_properties_create();
