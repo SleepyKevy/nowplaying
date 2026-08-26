@@ -1,0 +1,8 @@
+build/
+build_*/
+.deps/
+CMakeUserPresets.json
+*.user
+*.suo
+*.VC.db
+.vs/
