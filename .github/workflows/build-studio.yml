@@ -27,6 +27,7 @@ jobs:
         shell: pwsh
         run: |
           $candidates = @(
+            'C:\mingw64\bin\gcc.exe',
             'C:\msys64\mingw64\bin\gcc.exe',
             'C:\msys64\ucrt64\bin\gcc.exe'
           )
@@ -42,15 +43,25 @@ jobs:
           Write-Host "Using GCC: $gccPath"
           & $gccPath --version
 
-      - name: Decode and extract Studio source
+      - name: Reconstruct and extract Studio source
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force './studio-build' | Out-Null
-          $base64 = [System.IO.File]::ReadAllText('./studio/SleepyNowPlaying_Studio_Source.zip')
-          $base64 = $base64 -replace '[^A-Za-z0-9+/=]', ''
-          if ([string]::IsNullOrWhiteSpace($base64)) { throw 'Encoded Studio source is empty after sanitizing.' }
+          $parts = 0..3 | ForEach-Object {
+            $path = './studio/source.part.' + $_.ToString('00')
+            if (-not (Test-Path $path)) { throw "Missing source chunk: $path" }
+            [System.IO.File]::ReadAllText($path).Trim()
+          }
+          $base64 = [string]::Concat($parts)
+          if ($base64.Length -ne 25472) { throw "Unexpected encoded source length: $($base64.Length)" }
           $bytes = [System.Convert]::FromBase64String($base64)
+          if ($bytes.Length -ne 19103) { throw "Unexpected source ZIP size: $($bytes.Length)" }
           [System.IO.File]::WriteAllBytes('./SleepyNowPlaying_Studio_Source_REAL.zip', $bytes)
+          $hash = (Get-FileHash './SleepyNowPlaying_Studio_Source_REAL.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'fcb6841469d512a6c49f7f8b072f66731223ff1f7e0189e00252ef186100f2d7') {
+            throw "Source ZIP checksum mismatch: $hash"
+          }
+          Write-Host "Source ZIP verified: $hash"
           Expand-Archive -Path './SleepyNowPlaying_Studio_Source_REAL.zip' -DestinationPath './studio-build' -Force
           Get-ChildItem './studio-build'
 
