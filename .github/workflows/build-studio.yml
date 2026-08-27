@@ -42,11 +42,15 @@ jobs:
           Write-Host "Using GCC: $gccPath"
           & $gccPath --version
 
-      - name: Extract Studio source
+      - name: Decode and extract Studio source
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force './studio-build' | Out-Null
-          Expand-Archive -Path './studio/SleepyNowPlaying_Studio_Source.zip' -DestinationPath './studio-build' -Force
+          $base64 = [System.IO.File]::ReadAllText('./studio/SleepyNowPlaying_Studio_Source.zip').Trim()
+          $bytes = [System.Convert]::FromBase64String($base64)
+          [System.IO.File]::WriteAllBytes('./SleepyNowPlaying_Studio_Source_REAL.zip', $bytes)
+          Expand-Archive -Path './SleepyNowPlaying_Studio_Source_REAL.zip' -DestinationPath './studio-build' -Force
+          Get-ChildItem './studio-build'
 
       - name: Resolve Go modules
         shell: pwsh
