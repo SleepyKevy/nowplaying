@@ -1,0 +1,120 @@
++                                  obs_module_text("NowPlayingSource.TimePrecision"), 0, 2, 1);
++    add_gradient_controls(progress, "time_gradient_mode", "NowPlayingSource.TimeGradientMode",
++                          "time_color", "NowPlayingSource.TimeColor1", "time_color_2",
++                          "NowPlayingSource.TimeColor2", "time_color_3",
++                          "NowPlayingSource.TimeColor3", "time_gradient_angle",
++                          "NowPlayingSource.TimeGradientAngle");
++
+     obs_property_t* progress_style = obs_properties_add_list(
+         progress, "progress_style", obs_module_text("NowPlayingSource.ProgressStyle"),
+         OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+@@ -448,7 +522,19 @@ obs_properties_t* source_properties(void*)
+     add_list_item(progress_style, "NowPlayingSource.ProgressDots", "dots");
+     add_list_item(progress_style, "NowPlayingSource.ProgressSlider", "slider");
+     obs_properties_add_int_slider(progress, "progress_height",
+-                                  obs_module_text("NowPlayingSource.ProgressHeight"), 2, 30, 1);
++                                  obs_module_text("NowPlayingSource.ProgressHeight"), 1, 80, 1);
++    obs_properties_add_int_slider(progress, "progress_left_inset",
++                                  obs_module_text("NowPlayingSource.ProgressLeftInset"), 0, 1000, 1);
++    obs_properties_add_int_slider(progress, "progress_right_inset",
++                                  obs_module_text("NowPlayingSource.ProgressRightInset"), 0, 1000, 1);
++    obs_properties_add_int_slider(progress, "progress_vertical_offset",
++                                  obs_module_text("NowPlayingSource.ProgressVerticalOffset"), -200, 200, 1);
++    obs_properties_add_int_slider(progress, "progress_corner_radius",
++                                  obs_module_text("NowPlayingSource.ProgressCornerRadius"), 0, 100, 1);
++    obs_properties_add_int_slider(progress, "progress_fill_opacity",
++                                  obs_module_text("NowPlayingSource.ProgressFillOpacity"), 0, 100, 1);
++    obs_properties_add_int_slider(progress, "progress_track_opacity",
++                                  obs_module_text("NowPlayingSource.ProgressTrackOpacity"), 0, 100, 1);
+     add_gradient_controls(progress, "progress_gradient_mode",
+                           "NowPlayingSource.ProgressGradientMode", "progress_color",
+                           "NowPlayingSource.ProgressColor1", "progress_color_2",
+@@ -462,6 +548,45 @@ obs_properties_t* source_properties(void*)
+                           "NowPlayingSource.ProgressBackgroundColor3",
+                           "progress_background_gradient_angle",
+                           "NowPlayingSource.ProgressBackgroundGradientAngle");
++
++    obs_properties_add_int_slider(progress, "slim_height",
++                                  obs_module_text("NowPlayingSource.SlimHeight"), 1, 40, 1);
++    obs_properties_add_int_slider(progress, "slim_corner_radius",
++                                  obs_module_text("NowPlayingSource.SlimCornerRadius"), 0, 40, 1);
++    obs_properties_add_int_slider(progress, "segment_count",
++                                  obs_module_text("NowPlayingSource.SegmentCount"), 2, 200, 1);
++    obs_properties_add_int_slider(progress, "segment_gap",
++                                  obs_module_text("NowPlayingSource.SegmentGap"), 0, 40, 1);
++    obs_properties_add_int_slider(progress, "segment_corner_radius",
++                                  obs_module_text("NowPlayingSource.SegmentCornerRadius"), 0, 40, 1);
++    obs_properties_add_int_slider(progress, "dot_count",
++                                  obs_module_text("NowPlayingSource.DotCount"), 2, 256, 1);
++    obs_properties_add_int_slider(progress, "dot_size",
++                                  obs_module_text("NowPlayingSource.DotSize"), 1, 80, 1);
++    obs_properties_add_int_slider(progress, "slider_rail_height",
++                                  obs_module_text("NowPlayingSource.SliderRailHeight"), 1, 40, 1);
++    obs_properties_add_int_slider(progress, "slider_rail_corner_radius",
++                                  obs_module_text("NowPlayingSource.SliderRailCornerRadius"), 0, 40, 1);
++    obs_properties_add_int_slider(progress, "slider_knob_size",
++                                  obs_module_text("NowPlayingSource.SliderKnobSize"), 2, 100, 1);
++    obs_properties_add_int_slider(progress, "slider_knob_opacity",
++                                  obs_module_text("NowPlayingSource.SliderKnobOpacity"), 0, 100, 1);
++    add_gradient_controls(progress, "slider_knob_gradient_mode",
++                          "NowPlayingSource.SliderKnobGradientMode", "slider_knob_color",
++                          "NowPlayingSource.SliderKnobColor1", "slider_knob_color_2",
++                          "NowPlayingSource.SliderKnobColor2", "slider_knob_color_3",
++                          "NowPlayingSource.SliderKnobColor3", "slider_knob_gradient_angle",
++                          "NowPlayingSource.SliderKnobGradientAngle");
++    obs_properties_add_int_slider(progress, "slider_knob_outline_width",
++                                  obs_module_text("NowPlayingSource.SliderKnobOutlineWidth"), 0, 20, 1);
++    obs_properties_add_int_slider(progress, "slider_knob_outline_opacity",
++                                  obs_module_text("NowPlayingSource.SliderKnobOutlineOpacity"), 0, 100, 1);
++    add_gradient_controls(progress, "slider_knob_outline_gradient_mode",
++                          "NowPlayingSource.SliderKnobOutlineGradientMode", "slider_knob_outline_color",
++                          "NowPlayingSource.SliderKnobOutlineColor1", "slider_knob_outline_color_2",
++                          "NowPlayingSource.SliderKnobOutlineColor2", "slider_knob_outline_color_3",
++                          "NowPlayingSource.SliderKnobOutlineColor3", "slider_knob_outline_gradient_angle",
++                          "NowPlayingSource.SliderKnobOutlineGradientAngle");
+     obs_properties_add_group(properties, "progress_group",
+                              obs_module_text("NowPlayingSource.Progress"), OBS_GROUP_NORMAL,
+                              progress);
+@@ -549,8 +674,25 @@ void source_defaults(obs_data_t* settings)
+ 
+     obs_data_set_default_bool(settings, "show_progress", true);
+     obs_data_set_default_bool(settings, "show_time", true);
++    obs_data_set_default_bool(settings, "show_elapsed_time", true);
++    obs_data_set_default_bool(settings, "show_total_time", true);
++    obs_data_set_default_int(settings, "time_font_size", 14);
++    obs_data_set_default_int(settings, "time_gap", 5);
++    obs_data_set_default_int(settings, "time_precision", 0);
++    obs_data_set_default_string(settings, "time_gradient_mode", "solid");
++    obs_data_set_default_int(settings, "time_color", obs_rgba(174, 180, 199));
++    obs_data_set_default_int(settings, "time_color_2", obs_rgba(154, 130, 205));
++    obs_data_set_default_int(settings, "time_color_3", obs_rgba(102, 160, 195));
++    obs_data_set_default_double(settings, "time_gradient_angle", 0.0);
++
+     obs_data_set_default_string(settings, "progress_style", "classic");
+     obs_data_set_default_int(settings, "progress_height", 6);
++    obs_data_set_default_int(settings, "progress_left_inset", 0);
++    obs_data_set_default_int(settings, "progress_right_inset", 0);
++    obs_data_set_default_int(settings, "progress_vertical_offset", 0);
++    obs_data_set_default_int(settings, "progress_corner_radius", 3);
++    obs_data_set_default_int(settings, "progress_fill_opacity", 100);
++    obs_data_set_default_int(settings, "progress_track_opacity", 100);
+     obs_data_set_default_string(settings, "progress_gradient_mode", "solid");
+     obs_data_set_default_int(settings, "progress_color", obs_rgba(167, 102, 255));
+     obs_data_set_default_int(settings, "progress_color_2", obs_rgba(211, 92, 255));
+@@ -562,6 +704,30 @@ void source_defaults(obs_data_t* settings)
+     obs_data_set_default_int(settings, "progress_background_3", obs_rgba(120, 200, 255, 46));
+     obs_data_set_default_double(settings, "progress_background_gradient_angle", 0.0);
+ 
++    obs_data_set_default_int(settings, "slim_height", 2);
++    obs_data_set_default_int(settings, "slim_corner_radius", 1);
++    obs_data_set_default_int(settings, "segment_count", 18);
++    obs_data_set_default_int(settings, "segment_gap", 3);
++    obs_data_set_default_int(settings, "segment_corner_radius", 2);
++    obs_data_set_default_int(settings, "dot_count", 32);
++    obs_data_set_default_int(settings, "dot_size", 6);
++    obs_data_set_default_int(settings, "slider_rail_height", 2);
++    obs_data_set_default_int(settings, "slider_rail_corner_radius", 1);
++    obs_data_set_default_int(settings, "slider_knob_size", 10);
++    obs_data_set_default_int(settings, "slider_knob_opacity", 100);
++    obs_data_set_default_string(settings, "slider_knob_gradient_mode", "solid");
++    obs_data_set_default_int(settings, "slider_knob_color", obs_rgba(167, 102, 255));
