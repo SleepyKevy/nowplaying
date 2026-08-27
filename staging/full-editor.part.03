@@ -1,0 +1,170 @@
+ void draw_progress_slider(QPainter& painter, const QRectF& bar, double ratio,
+                           const RenderConfig& config)
+ {
+-    const double knob_diameter = std::max(3.0, bar.height());
++    const double knob_diameter = std::max(2, config.slider_knob_size);
+     const double knob_radius = knob_diameter * 0.5;
+-    const double rail_height = std::max(1.5, bar.height() * 0.30);
++    const double rail_height = std::max(1, config.slider_rail_height);
++    const double rail_radius = std::min<double>(config.slider_rail_corner_radius, rail_height * 0.5);
+     const double rail_left = bar.left() + knob_radius;
+-    const double rail_width = std::max(1.0, bar.width() - knob_diameter);
++    const double rail_width = std::max(0.5, bar.width() - knob_diameter);
+     const QRectF rail(rail_left, bar.center().y() - rail_height * 0.5, rail_width, rail_height);
+-    fill_rounded(painter, rail, rail_height * 0.5,
+-                 gradient_brush(config.progress_background, bar));
++    fill_rounded(painter, rail, rail_radius,
++                 gradient_brush(config.progress_background, bar, config.progress_track_opacity));
+ 
+     const double progress_x = rail.left() + rail.width() * ratio;
+     if (ratio > 0.0) {
+         QRectF fill = rail;
+         fill.setWidth(rail.width() * ratio);
+-        fill_rounded(painter, fill, rail_height * 0.5, gradient_brush(config.progress, bar));
++        fill_rounded(painter, fill, std::min({rail_radius, fill.width() * 0.5, fill.height() * 0.5}),
++                     gradient_brush(config.progress, bar, config.progress_fill_opacity));
+     }
+ 
++    const QRectF knob_bounds(progress_x - knob_radius, bar.center().y() - knob_radius,
++                             knob_diameter, knob_diameter);
+     painter.setPen(Qt::NoPen);
+-    painter.setBrush(gradient_brush(config.progress, bar));
+-    painter.drawEllipse(QPointF(progress_x, bar.center().y()), knob_radius, knob_radius);
++    painter.setBrush(gradient_brush(config.slider_knob, knob_bounds, config.slider_knob_opacity));
++    painter.drawEllipse(knob_bounds);
++
++    if (config.slider_knob_outline_width > 0 &&
++        style_visible(config.slider_knob_outline, config.slider_knob_outline_opacity)) {
++        set_gradient_pen(painter, config.slider_knob_outline, knob_bounds,
++                         config.slider_knob_outline_width, config.slider_knob_outline_opacity);
++        painter.setBrush(Qt::NoBrush);
++        const double inset = config.slider_knob_outline_width * 0.5;
++        painter.drawEllipse(knob_bounds.adjusted(inset, inset, -inset, -inset));
++    }
+ }
+ 
+ void draw_progress_bar(QPainter& painter, const QRectF& bar, double ratio,
+@@ -433,8 +463,16 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+     }
+ 
+     const int progress_height = std::max(1, config.progress_height);
+-    const int time_height = config.show_time ? 19 : 0;
+-    const int progress_area_height = config.show_progress ? progress_height + 8 + time_height : 0;
++    const int progress_visual_height = std::max(
++        progress_height,
++        config.progress_style == ProgressStyle::dots ? std::max(1, config.dot_size) :
++        config.progress_style == ProgressStyle::slider ? std::max(2, config.slider_knob_size) :
++        config.progress_style == ProgressStyle::slim ? std::max(1, config.slim_height) : progress_height);
++    const int time_height = config.show_time ? std::max(10, config.time_font_size + 5) : 0;
++    const int progress_area_height = config.show_progress
++                                         ? progress_visual_height + 8 + time_height +
++                                               std::abs(config.progress_vertical_offset) + config.time_gap
++                                         : 0;
+     QRectF text_area = content;
+     text_area.setBottom(std::max(text_area.top(), content.bottom() - progress_area_height));
+ 
+@@ -471,20 +509,29 @@ QImage CardRenderer::render(const TrackState& state, const QImage& artwork,
+     }
+ 
+     if (config.show_progress) {
+-        const double bar_y = content.bottom() - progress_height;
+-        const QRectF bar(content.left(), bar_y, content.width(), progress_height);
++        const double left = content.left() + std::max(0, config.progress_left_inset);
++        const double right = content.right() - std::max(0, config.progress_right_inset);
++        const double bar_width = std::max(1.0, right - left);
++        const double center_y = content.bottom() - progress_visual_height * 0.5 +
++                                config.progress_vertical_offset;
++        const QRectF bar(left, center_y - progress_height * 0.5, bar_width, progress_height);
+         draw_progress_bar(painter, bar, state.progress_ratio(), config);
+ 
+         if (time_height > 0) {
+-            const QFont time_font = sized_font(config, std::max(10, config.album_size - 2), false);
++            const QFont time_font = sized_font(config, config.time_font_size, false);
+             painter.setFont(time_font);
+-            const QRectF time_bounds(content.left(), bar.top() - time_height - 5, content.width(),
++            const double visual_top = center_y - progress_visual_height * 0.5;
++            const QRectF time_bounds(left, visual_top - time_height - config.time_gap, bar_width,
+                                      time_height);
+-            set_gradient_pen(painter, config.album, time_bounds);
+-            painter.drawText(time_bounds, Qt::AlignLeft | Qt::AlignVCenter,
+-                             format_time(state.estimated_progress_ms()));
+-            painter.drawText(time_bounds, Qt::AlignRight | Qt::AlignVCenter,
+-                             format_time(state.duration_ms));
++            set_gradient_pen(painter, config.time, time_bounds);
++            if (config.show_elapsed_time) {
++                painter.drawText(time_bounds, Qt::AlignLeft | Qt::AlignVCenter,
++                                 format_time(state.estimated_progress_ms(), config.time_precision));
++            }
++            if (config.show_total_time) {
++                painter.drawText(time_bounds, Qt::AlignRight | Qt::AlignVCenter,
++                                 format_time(state.duration_ms, config.time_precision));
++            }
+         }
+     }
+ 
+ diff --git a/src/render/render-config.hpp b/src/render/render-config.hpp
+index f2e175e..14c26f8 100644
+--- a/src/render/render-config.hpp
++++ b/src/render/render-config.hpp
+@@ -114,7 +114,26 @@ struct RenderConfig {
+ 
+     bool show_progress = true;
+     bool show_time = true;
++    bool show_elapsed_time = true;
++    bool show_total_time = true;
++    int time_font_size = 14;
++    int time_gap = 5;
++    int time_precision = 0;
++    GradientStyle time{
++        GradientMode::solid,
++        QColor(174, 180, 199, 255),
++        QColor(154, 130, 205, 255),
++        QColor(102, 160, 195, 255),
++        0.0,
++    };
++
+     int progress_height = 6;
++    int progress_left_inset = 0;
++    int progress_right_inset = 0;
++    int progress_vertical_offset = 0;
++    int progress_corner_radius = 3;
++    int progress_fill_opacity = 100;
++    int progress_track_opacity = 100;
+     ProgressStyle progress_style = ProgressStyle::classic;
+     GradientStyle progress{
+         GradientMode::solid,
+@@ -131,6 +150,34 @@ struct RenderConfig {
+         0.0,
+     };
+ 
++    int slim_height = 2;
++    int slim_corner_radius = 1;
++    int segment_count = 18;
++    int segment_gap = 3;
++    int segment_corner_radius = 2;
++    int dot_count = 32;
++    int dot_size = 6;
++    int slider_rail_height = 2;
++    int slider_rail_corner_radius = 1;
++    int slider_knob_size = 10;
++    int slider_knob_opacity = 100;
++    GradientStyle slider_knob{
++        GradientMode::solid,
++        QColor(167, 102, 255, 255),
++        QColor(211, 92, 255, 255),
++        QColor(74, 195, 255, 255),
++        0.0,
++    };
++    int slider_knob_outline_width = 0;
++    int slider_knob_outline_opacity = 100;
++    GradientStyle slider_knob_outline{
++        GradientMode::solid,
++        QColor(255, 255, 255, 255),
++        QColor(210, 190, 255, 255),
++        QColor(150, 220, 255, 255),
++        0.0,
++    };
++
+     bool hide_when_idle = true;
+     bool hide_when_paused = false;
+     bool preview_mode = false;
