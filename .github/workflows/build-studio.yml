@@ -46,7 +46,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force './studio-build' | Out-Null
-          $base64 = [System.IO.File]::ReadAllText('./studio/SleepyNowPlaying_Studio_Source.zip').Trim()
+          $base64 = [System.IO.File]::ReadAllText('./studio/SleepyNowPlaying_Studio_Source.zip')
+          $base64 = $base64 -replace '[^A-Za-z0-9+/=]', ''
+          if ([string]::IsNullOrWhiteSpace($base64)) { throw 'Encoded Studio source is empty after sanitizing.' }
           $bytes = [System.Convert]::FromBase64String($base64)
           [System.IO.File]::WriteAllBytes('./SleepyNowPlaying_Studio_Source_REAL.zip', $bytes)
           Expand-Archive -Path './SleepyNowPlaying_Studio_Source_REAL.zip' -DestinationPath './studio-build' -Force
