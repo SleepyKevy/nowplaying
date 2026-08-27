@@ -6,6 +6,7 @@ on:
     paths:
       - 'OBS_Now_Playing_Complete_v1.0.0_BUILD_TOOLS_ONLY.zip'
       - 'overrides/**'
+      - 'staging/**'
       - '.github/workflows/build-windows.yml'
 
 jobs:
@@ -75,16 +76,29 @@ jobs:
           [System.IO.File]::WriteAllText('./overrides/advanced-ui.patch', $advancedPatch, $utf8NoBom)
           git apply --directory=source --ignore-space-change --ignore-whitespace ./overrides/advanced-ui.patch
 
-      - name: Upload patched source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: OBS-Now-Playing-Patched-Source
-          path: |
-            source/src/render/render-config.hpp
-            source/src/render/card-renderer.cpp
-            source/src/obs/now-playing-source.cpp
-            source/data/locale/en-US.ini
-          if-no-files-found: error
+      - name: Apply full progress editor
+        shell: pwsh
+        run: |
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          $targets = @(
+            './source/src/render/render-config.hpp',
+            './source/src/render/card-renderer.cpp',
+            './source/src/obs/now-playing-source.cpp',
+            './source/data/locale/en-US.ini'
+          )
+          foreach ($target in $targets) {
+            $text = [System.IO.File]::ReadAllText($target).Replace("`r`n", "`n")
+            [System.IO.File]::WriteAllText($target, $text, $utf8NoBom)
+          }
+
+          $parts = @()
+          for ($i = 0; $i -le 3; $i++) {
+            $partName = './staging/full-editor.part.' + $i.ToString('00')
+            $parts += [System.IO.File]::ReadAllText($partName)
+          }
+          $patch = [string]::Concat($parts)
+          [System.IO.File]::WriteAllText('./staging/full-editor.patch', $patch, $utf8NoBom)
+          git apply --directory=source --ignore-space-change --ignore-whitespace ./staging/full-editor.patch
 
       - name: Validate project
         shell: pwsh
@@ -99,6 +113,6 @@ jobs:
       - name: Upload compiled OBS plugin
         uses: actions/upload-artifact@v4
         with:
-          name: OBS-Now-Playing-1.0.0-Windows-x64-GSMTC-Gradients-5Bars
+          name: OBS-Now-Playing-1.0.0-Windows-x64-GSMTC-Full-Progress-Editor
           path: source/build_x64/OBS-Now-Playing-1.0.0-Windows-x64.zip
           if-no-files-found: error
