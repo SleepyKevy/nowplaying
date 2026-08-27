@@ -23,20 +23,24 @@ jobs:
           go-version: '1.25.1'
           cache: false
 
-      - name: Install MinGW for Windows SMTC
+      - name: Use preinstalled MinGW GCC for Windows SMTC
         shell: pwsh
         run: |
-          choco install mingw -y --no-progress
           $candidates = @(
-            "$env:ProgramData\mingw64\mingw64\bin\gcc.exe",
-            "$env:ProgramData\mingw64\mingw32\bin\gcc.exe"
+            'C:\msys64\mingw64\bin\gcc.exe',
+            'C:\msys64\ucrt64\bin\gcc.exe'
           )
           $gccPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $gccPath) { throw 'MinGW gcc.exe was not found in the Chocolatey install directory.' }
+          if (-not $gccPath) {
+            $cmd = Get-Command gcc.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $gccPath = $cmd.Source }
+          }
+          if (-not $gccPath) { throw 'Preinstalled MinGW GCC was not found on the GitHub Windows runner.' }
           $gccDir = Split-Path -Parent $gccPath
           "CC=$gccPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $gccDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           Write-Host "Using GCC: $gccPath"
+          & $gccPath --version
 
       - name: Extract Studio source
         shell: pwsh
