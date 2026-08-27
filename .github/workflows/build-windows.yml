@@ -75,6 +75,17 @@ jobs:
           [System.IO.File]::WriteAllText('./overrides/advanced-ui.patch', $advancedPatch, $utf8NoBom)
           git apply --directory=source --ignore-space-change --ignore-whitespace ./overrides/advanced-ui.patch
 
+      - name: Upload patched source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: OBS-Now-Playing-Patched-Source
+          path: |
+            source/src/render/render-config.hpp
+            source/src/render/card-renderer.cpp
+            source/src/obs/now-playing-source.cpp
+            source/data/locale/en-US.ini
+          if-no-files-found: error
+
       - name: Validate project
         shell: pwsh
         working-directory: ./source
