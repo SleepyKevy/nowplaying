@@ -1,0 +1,164 @@
++    obs_data_set_default_int(settings, "slider_knob_color_2", obs_rgba(211, 92, 255));
++    obs_data_set_default_int(settings, "slider_knob_color_3", obs_rgba(74, 195, 255));
++    obs_data_set_default_double(settings, "slider_knob_gradient_angle", 0.0);
++    obs_data_set_default_int(settings, "slider_knob_outline_width", 0);
++    obs_data_set_default_int(settings, "slider_knob_outline_opacity", 100);
++    obs_data_set_default_string(settings, "slider_knob_outline_gradient_mode", "solid");
++    obs_data_set_default_int(settings, "slider_knob_outline_color", obs_rgba(255, 255, 255));
++    obs_data_set_default_int(settings, "slider_knob_outline_color_2", obs_rgba(210, 190, 255));
++    obs_data_set_default_int(settings, "slider_knob_outline_color_3", obs_rgba(150, 220, 255));
++    obs_data_set_default_double(settings, "slider_knob_outline_gradient_angle", 0.0);
++
+     obs_data_set_default_bool(settings, "hide_when_idle", true);
+     obs_data_set_default_bool(settings, "hide_when_paused", false);
+     obs_data_set_default_bool(settings, "preview_mode", false);
+diff --git a/src/render/card-renderer.cpp b/src/render/card-renderer.cpp
+index de3700e..b159495 100644
+--- a/src/render/card-renderer.cpp
++++ b/src/render/card-renderer.cpp
+@@ -40,19 +40,29 @@ QString display_title(const TrackState& state)
+     return QStringLiteral("No track");
+ }
+ 
+-QString format_time(std::int64_t milliseconds)
++QString format_time(std::int64_t milliseconds, int precision)
+ {
+-    const std::int64_t total_seconds = std::max<std::int64_t>(0, milliseconds / 1'000);
++    const std::int64_t safe_ms = std::max<std::int64_t>(0, milliseconds);
++    const std::int64_t total_seconds = safe_ms / 1'000;
+     const std::int64_t hours = total_seconds / 3'600;
+     const std::int64_t minutes = (total_seconds % 3'600) / 60;
+     const std::int64_t seconds = total_seconds % 60;
++    QString value;
+     if (hours > 0) {
+-        return QStringLiteral("%1:%2:%3")
+-            .arg(hours)
+-            .arg(minutes, 2, 10, QLatin1Char('0'))
+-            .arg(seconds, 2, 10, QLatin1Char('0'));
++        value = QStringLiteral("%1:%2:%3")
++                    .arg(hours)
++                    .arg(minutes, 2, 10, QLatin1Char('0'))
++                    .arg(seconds, 2, 10, QLatin1Char('0'));
++    } else {
++        value = QStringLiteral("%1:%2").arg(minutes).arg(seconds, 2, 10, QLatin1Char('0'));
++    }
++    if (precision >= 1) {
++        value += QStringLiteral(".%1").arg((safe_ms % 1'000) / 100);
+     }
+-    return QStringLiteral("%1:%2").arg(minutes).arg(seconds, 2, 10, QLatin1Char('0'));
++    if (precision >= 2) {
++        value += QString::number((safe_ms % 100) / 10);
++    }
++    return value;
+ }
+ 
+ QFont sized_font(const RenderConfig& config, int pixel_size, bool bold)
+@@ -233,48 +243,53 @@ void fill_rounded(QPainter& painter, const QRectF& rect, double radius, const QB
+ void draw_progress_classic(QPainter& painter, const QRectF& bar, double ratio,
+                            const RenderConfig& config)
+ {
+-    fill_rounded(painter, bar, bar.height() * 0.5,
+-                 gradient_brush(config.progress_background, bar));
++    const double radius = std::min<double>(config.progress_corner_radius, bar.height() * 0.5);
++    fill_rounded(painter, bar, radius,
++                 gradient_brush(config.progress_background, bar, config.progress_track_opacity));
+     if (ratio <= 0.0) {
+         return;
+     }
+     QRectF fill = bar;
+     fill.setWidth(bar.width() * ratio);
+-    const double radius = std::min(bar.height() * 0.5, fill.width() * 0.5);
+-    fill_rounded(painter, fill, radius, gradient_brush(config.progress, bar));
++    const double fill_radius = std::min({radius, fill.height() * 0.5, fill.width() * 0.5});
++    fill_rounded(painter, fill, fill_radius,
++                 gradient_brush(config.progress, bar, config.progress_fill_opacity));
+ }
+ 
+ void draw_progress_slim(QPainter& painter, const QRectF& bar, double ratio,
+                         const RenderConfig& config)
+ {
+-    const double line_height = std::max(1.0, bar.height() * 0.38);
++    const double line_height = std::min<double>(std::max(1, config.slim_height), bar.height());
++    const double radius = std::min<double>(config.slim_corner_radius, line_height * 0.5);
+     const QRectF rail(bar.left(), bar.center().y() - line_height * 0.5, bar.width(), line_height);
+-    fill_rounded(painter, rail, line_height * 0.5,
+-                 gradient_brush(config.progress_background, bar));
++    fill_rounded(painter, rail, radius,
++                 gradient_brush(config.progress_background, bar, config.progress_track_opacity));
+     if (ratio > 0.0) {
+         QRectF fill = rail;
+         fill.setWidth(rail.width() * ratio);
+-        fill_rounded(painter, fill, std::min(line_height * 0.5, fill.width() * 0.5),
+-                     gradient_brush(config.progress, bar));
++        fill_rounded(painter, fill, std::min({radius, fill.width() * 0.5, fill.height() * 0.5}),
++                     gradient_brush(config.progress, bar, config.progress_fill_opacity));
+     }
+ }
+ 
+ void draw_progress_segmented(QPainter& painter, const QRectF& bar, double ratio,
+                              const RenderConfig& config)
+ {
+-    const int segments = std::clamp(static_cast<int>(bar.width() / std::max(24.0, bar.height() * 3.6)),
+-                                    6, 32);
+-    const double gap = std::clamp(bar.height() * 0.42, 1.5, 5.0);
++    const int segments = std::max(2, config.segment_count);
++    const double gap = std::max(0, config.segment_gap);
+     const double total_gap = gap * static_cast<double>(segments - 1);
+-    const double segment_width = std::max(1.0, (bar.width() - total_gap) / segments);
+-    const QBrush background = gradient_brush(config.progress_background, bar);
+-    const QBrush fill = gradient_brush(config.progress, bar);
++    const double segment_width = std::max(0.25, (bar.width() - total_gap) / segments);
++    const double radius = std::min({static_cast<double>(config.segment_corner_radius),
++                                    bar.height() * 0.5, segment_width * 0.5});
++    const QBrush background =
++        gradient_brush(config.progress_background, bar, config.progress_track_opacity);
++    const QBrush fill = gradient_brush(config.progress, bar, config.progress_fill_opacity);
+ 
+     auto draw_segments = [&](const QBrush& brush) {
+         for (int index = 0; index < segments; ++index) {
+             const double x = bar.left() + index * (segment_width + gap);
+             const QRectF segment(x, bar.top(), segment_width, bar.height());
+-            fill_rounded(painter, segment, std::min(bar.height() * 0.35, segment_width * 0.35), brush);
++            fill_rounded(painter, segment, radius, brush);
+         }
+     };
+ 
+@@ -290,18 +305,19 @@ void draw_progress_segmented(QPainter& painter, const QRectF& bar, double ratio,
+ void draw_progress_dots(QPainter& painter, const QRectF& bar, double ratio,
+                         const RenderConfig& config)
+ {
+-    const double diameter = std::max(2.0, bar.height());
+-    const double usable_width = std::max(1.0, bar.width() - diameter);
+-    const int dots = std::clamp(static_cast<int>(bar.width() / std::max(10.0, diameter * 1.65)), 8, 64);
+-    const QBrush background = gradient_brush(config.progress_background, bar);
+-    const QBrush fill = gradient_brush(config.progress, bar);
++    const double diameter = std::max(1, config.dot_size);
++    const double usable_width = std::max(0.0, bar.width() - diameter);
++    const int dots = std::max(2, config.dot_count);
++    const QBrush background =
++        gradient_brush(config.progress_background, bar, config.progress_track_opacity);
++    const QBrush fill = gradient_brush(config.progress, bar, config.progress_fill_opacity);
+ 
+     auto draw_dots = [&](const QBrush& brush) {
++        painter.setPen(Qt::NoPen);
++        painter.setBrush(brush);
+         for (int index = 0; index < dots; ++index) {
+-            const double t = dots <= 1 ? 0.0 : static_cast<double>(index) / (dots - 1);
++            const double t = static_cast<double>(index) / static_cast<double>(dots - 1);
+             const double x = bar.left() + diameter * 0.5 + usable_width * t;
+-            painter.setPen(Qt::NoPen);
+-            painter.setBrush(brush);
+             painter.drawEllipse(QPointF(x, bar.center().y()), diameter * 0.5, diameter * 0.5);
+         }
+     };
+@@ -309,7 +325,8 @@ void draw_progress_dots(QPainter& painter, const QRectF& bar, double ratio,
+     draw_dots(background);
+     if (ratio > 0.0) {
+         painter.save();
+-        painter.setClipRect(QRectF(bar.left(), bar.top(), bar.width() * ratio, bar.height()));
++        painter.setClipRect(QRectF(bar.left(), bar.center().y() - diameter * 0.5,
++                                   bar.width() * ratio, diameter));
+         draw_dots(fill);
+         painter.restore();
+     }
+@@ -318,25 +335,38 @@ void draw_progress_dots(QPainter& painter, const QRectF& bar, double ratio,
