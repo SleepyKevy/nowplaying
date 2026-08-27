@@ -1,0 +1,138 @@
+diff --git a/data/locale/en-US.ini b/data/locale/en-US.ini
+index 9ecf093..412deb3 100644
+--- a/data/locale/en-US.ini
++++ b/data/locale/en-US.ini
+@@ -122,3 +122,42 @@ NowPlayingSource.ProgressBackgroundColor1="Progress track color 1"
+ NowPlayingSource.ProgressBackgroundColor2="Progress track color 2"
+ NowPlayingSource.ProgressBackgroundColor3="Progress track color 3"
+ NowPlayingSource.ProgressBackgroundGradientAngle="Progress track gradient angle"
++NowPlayingSource.ShowElapsedTime="Show elapsed time"
++NowPlayingSource.ShowTotalTime="Show total time"
++NowPlayingSource.TimeFontSize="Time font size"
++NowPlayingSource.TimeGap="Time-to-bar spacing"
++NowPlayingSource.TimePrecision="Time decimals (0-2)"
++NowPlayingSource.TimeGradientMode="Time color mode"
++NowPlayingSource.TimeColor1="Time color 1"
++NowPlayingSource.TimeColor2="Time color 2"
++NowPlayingSource.TimeColor3="Time color 3"
++NowPlayingSource.TimeGradientAngle="Time gradient angle"
++NowPlayingSource.ProgressLeftInset="Progress left inset"
++NowPlayingSource.ProgressRightInset="Progress right inset"
++NowPlayingSource.ProgressVerticalOffset="Progress vertical offset"
++NowPlayingSource.ProgressCornerRadius="Classic bar corner radius"
++NowPlayingSource.ProgressFillOpacity="Progress fill opacity"
++NowPlayingSource.ProgressTrackOpacity="Progress track opacity"
++NowPlayingSource.SlimHeight="Slim line thickness"
++NowPlayingSource.SlimCornerRadius="Slim line corner radius"
++NowPlayingSource.SegmentCount="Segment count"
++NowPlayingSource.SegmentGap="Segment gap"
++NowPlayingSource.SegmentCornerRadius="Segment corner radius"
++NowPlayingSource.DotCount="Dot count"
++NowPlayingSource.DotSize="Dot size"
++NowPlayingSource.SliderRailHeight="Slider rail thickness"
++NowPlayingSource.SliderRailCornerRadius="Slider rail corner radius"
++NowPlayingSource.SliderKnobSize="Slider knob size"
++NowPlayingSource.SliderKnobOpacity="Slider knob opacity"
++NowPlayingSource.SliderKnobGradientMode="Slider knob color mode"
++NowPlayingSource.SliderKnobColor1="Slider knob color 1"
++NowPlayingSource.SliderKnobColor2="Slider knob color 2"
++NowPlayingSource.SliderKnobColor3="Slider knob color 3"
++NowPlayingSource.SliderKnobGradientAngle="Slider knob gradient angle"
++NowPlayingSource.SliderKnobOutlineWidth="Slider knob outline width"
++NowPlayingSource.SliderKnobOutlineOpacity="Slider knob outline opacity"
++NowPlayingSource.SliderKnobOutlineGradientMode="Slider knob outline color mode"
++NowPlayingSource.SliderKnobOutlineColor1="Slider knob outline color 1"
++NowPlayingSource.SliderKnobOutlineColor2="Slider knob outline color 2"
++NowPlayingSource.SliderKnobOutlineColor3="Slider knob outline color 3"
++NowPlayingSource.SliderKnobOutlineGradientAngle="Slider knob outline gradient angle"
+diff --git a/src/obs/now-playing-source.cpp b/src/obs/now-playing-source.cpp
+index 9db6ca5..a8b1fd1 100644
+--- a/src/obs/now-playing-source.cpp
++++ b/src/obs/now-playing-source.cpp
+@@ -228,7 +228,31 @@ now_playing::RenderConfig read_config(obs_data_t* settings)
+ 
+     config.show_progress = obs_data_get_bool(settings, "show_progress");
+     config.show_time = obs_data_get_bool(settings, "show_time");
+-    config.progress_height = static_cast<int>(obs_data_get_int(settings, "progress_height"));
++    config.show_elapsed_time = obs_data_get_bool(settings, "show_elapsed_time");
++    config.show_total_time = obs_data_get_bool(settings, "show_total_time");
++    config.time_font_size = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "time_font_size"), 8, 72));
++    config.time_gap = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "time_gap"), 0, 80));
++    config.time_precision = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "time_precision"), 0, 2));
++    config.time = read_gradient(settings, "time_gradient_mode", "time_color", "time_color_2",
++                                "time_color_3", "time_gradient_angle");
++
++    config.progress_height = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_height"), 1, 80));
++    config.progress_left_inset = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_left_inset"), 0, 1000));
++    config.progress_right_inset = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_right_inset"), 0, 1000));
++    config.progress_vertical_offset = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_vertical_offset"), -200, 200));
++    config.progress_corner_radius = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_corner_radius"), 0, 100));
++    config.progress_fill_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_fill_opacity"), 0, 100));
++    config.progress_track_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "progress_track_opacity"), 0, 100));
+     config.progress_style = parse_progress_style(obs_data_get_string(settings, "progress_style"));
+     config.progress =
+         read_gradient(settings, "progress_gradient_mode", "progress_color", "progress_color_2",
+@@ -238,6 +262,40 @@ now_playing::RenderConfig read_config(obs_data_t* settings)
+                       "progress_background_2", "progress_background_3",
+                       "progress_background_gradient_angle");
+ 
++    config.slim_height = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slim_height"), 1, 40));
++    config.slim_corner_radius = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slim_corner_radius"), 0, 40));
++    config.segment_count = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "segment_count"), 2, 200));
++    config.segment_gap = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "segment_gap"), 0, 40));
++    config.segment_corner_radius = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "segment_corner_radius"), 0, 40));
++    config.dot_count = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "dot_count"), 2, 256));
++    config.dot_size = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "dot_size"), 1, 80));
++    config.slider_rail_height = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_rail_height"), 1, 40));
++    config.slider_rail_corner_radius = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_rail_corner_radius"), 0, 40));
++    config.slider_knob_size = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_knob_size"), 2, 100));
++    config.slider_knob_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_knob_opacity"), 0, 100));
++    config.slider_knob =
++        read_gradient(settings, "slider_knob_gradient_mode", "slider_knob_color",
++                      "slider_knob_color_2", "slider_knob_color_3", "slider_knob_gradient_angle");
++    config.slider_knob_outline_width = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_knob_outline_width"), 0, 20));
++    config.slider_knob_outline_opacity = static_cast<int>(
++        std::clamp<std::int64_t>(obs_data_get_int(settings, "slider_knob_outline_opacity"), 0, 100));
++    config.slider_knob_outline =
++        read_gradient(settings, "slider_knob_outline_gradient_mode", "slider_knob_outline_color",
++                      "slider_knob_outline_color_2", "slider_knob_outline_color_3",
++                      "slider_knob_outline_gradient_angle");
++
+     config.hide_when_idle = obs_data_get_bool(settings, "hide_when_idle");
+     config.hide_when_paused = obs_data_get_bool(settings, "hide_when_paused");
+     config.preview_mode = obs_data_get_bool(settings, "preview_mode");
+@@ -439,6 +497,22 @@ obs_properties_t* source_properties(void*)
+     obs_properties_add_bool(progress, "show_progress",
+                             obs_module_text("NowPlayingSource.ShowProgress"));
+     obs_properties_add_bool(progress, "show_time", obs_module_text("NowPlayingSource.ShowTime"));
++    obs_properties_add_bool(progress, "show_elapsed_time",
++                            obs_module_text("NowPlayingSource.ShowElapsedTime"));
++    obs_properties_add_bool(progress, "show_total_time",
++                            obs_module_text("NowPlayingSource.ShowTotalTime"));
++    obs_properties_add_int_slider(progress, "time_font_size",
++                                  obs_module_text("NowPlayingSource.TimeFontSize"), 8, 72, 1);
++    obs_properties_add_int_slider(progress, "time_gap",
++                                  obs_module_text("NowPlayingSource.TimeGap"), 0, 80, 1);
++    obs_properties_add_int_slider(progress, "time_precision",
