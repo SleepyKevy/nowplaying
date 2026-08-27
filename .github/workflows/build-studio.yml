@@ -27,14 +27,16 @@ jobs:
         shell: pwsh
         run: |
           choco install mingw -y --no-progress
-          $gcc = Get-ChildItem -Path C:\ -Filter gcc.exe -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match 'mingw' } |
-            Select-Object -First 1
-          if (-not $gcc) { throw 'MinGW gcc.exe was not found after installation.' }
-          $gccDir = $gcc.Directory.FullName
-          "CC=$($gcc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $candidates = @(
+            "$env:ProgramData\mingw64\mingw64\bin\gcc.exe",
+            "$env:ProgramData\mingw64\mingw32\bin\gcc.exe"
+          )
+          $gccPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $gccPath) { throw 'MinGW gcc.exe was not found in the Chocolatey install directory.' }
+          $gccDir = Split-Path -Parent $gccPath
+          "CC=$gccPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $gccDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "Using GCC: $($gcc.FullName)"
+          Write-Host "Using GCC: $gccPath"
 
       - name: Extract Studio source
         shell: pwsh
